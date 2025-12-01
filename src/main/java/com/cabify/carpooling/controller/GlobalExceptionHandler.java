@@ -1,0 +1,40 @@
+package com.cabify.carpooling.controller;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+
+/**
+ * Global exception handler to catch and log errors before they become 400 responses.
+ */
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Void> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.error("Failed to read HTTP message. This might be due to: " +
+                "1) Request body too large, 2) Invalid JSON format, 3) Deserialization error", e);
+        log.error("Root cause: {}", e.getRootCause() != null ? e.getRootCause().getMessage() : e.getMessage());
+        return ResponseEntity.badRequest().build();
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Void> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
+        log.error("Request body size exceeded maximum allowed size. Max size: {}, Actual size: {}",
+                e.getMaxUploadSize(), "unknown");
+        return ResponseEntity.badRequest().build();
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Void> handleGenericException(Exception e) {
+        log.error("Unexpected error in controller", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    }
+}

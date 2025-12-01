@@ -168,14 +168,17 @@ This prevents indefinite waiting for large groups while maximizing resource util
 # See all available commands
 make help
 
-# Start the development server
+# Start development server with live reload (recommended for active development)
+make dev-live
+
+# Or start with debugging enabled
+make dev-debug
+
+# Or start production-like server (no live reload)
 make dev
 
 # Check service health
 make status
-
-# Test API endpoints
-make test-api
 
 # View logs
 make logs
@@ -189,11 +192,12 @@ The service runs on port `9091` by default.
 ### Available Make Commands
 
 #### Development
-- `make dev` - Start development server with Docker
-- `make logs` - Show server logs in real-time
-- `make stop` - Stop the server
-- `make restart` - Restart the server
-- `make ssh` - Enter the container for debugging
+- `make dev` - Start server (production mode)
+- `make dev-live` - Start with live reload (auto-reloads on code changes)
+- `make dev-debug` - Start with debugging (port 5005)
+- `make logs` - Show server logs
+- `make stop` - Stop server
+- `make status` - Check if server is running
 
 #### Testing
 - `make test` - Run all unit and integration tests
@@ -389,31 +393,48 @@ Key differences:
 
 ## Development Workflow
 
-### Typical Development Session
+### Typical Development Session (with Live Reload)
 
 ```bash
-# 1. Start the server
-make dev
+# 1. Start the server with live reload
+make dev-live
 
 # 2. In another terminal, watch logs
 make logs
 
-# 3. Make code changes...
+# 3. Make code changes in your IDE...
+#    - Edit Java files
+#    - Save → Spring Boot DevTools auto-reloads (5-10 seconds)
+#    - No need to restart!
 
-# 4. Restart to apply changes
-make restart
+# 4. Test your changes
+curl http://localhost:9091/status
 
-# 5. Test your changes
-make test-api
-
-# 6. Run unit tests
+# 5. Run unit tests
 make test
 
-# 7. When finished
+# 6. When finished
 make stop
 ```
 
 ### Debugging
+
+#### Remote Debugging (Recommended)
+
+```bash
+# 1. Start server with debugging enabled
+make dev-debug
+
+# 2. In your IDE (VS Code, IntelliJ, Eclipse):
+#    - Connect to localhost:5005
+#    - Set breakpoints
+#    - Make requests → Debugger stops at breakpoints
+
+# VS Code: Press F5 (already configured in .vscode/launch.json)
+# IntelliJ: Run > Edit Configurations > Remote JVM Debug (localhost:5005)
+```
+
+#### Container Debugging
 
 ```bash
 # Enter the container
@@ -425,6 +446,12 @@ make ssh
 # - Check processes: ps aux
 # - Exit: exit
 ```
+
+### Development Modes
+
+- **`make dev`**: Production-like mode (JAR, no live reload) - fastest startup
+- **`make dev-live`**: Development mode with live reload - auto-reloads on code changes
+- **`make dev-debug`**: Development mode with debugging - connect IDE to port 5005
 
 ### Docker Compose (Optional)
 

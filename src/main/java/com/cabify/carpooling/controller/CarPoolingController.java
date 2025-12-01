@@ -1,5 +1,16 @@
 package com.cabify.carpooling.controller;
 
+import java.util.List;
+
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.cabify.carpooling.exception.ExistingGroupException;
 import com.cabify.carpooling.exception.GroupNotFoundException;
 import com.cabify.carpooling.exception.InvalidPayloadException;
@@ -8,11 +19,6 @@ import com.cabify.carpooling.model.Journey;
 import com.cabify.carpooling.service.CarService;
 import com.cabify.carpooling.service.GroupService;
 import com.cabify.carpooling.service.JourneyService;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 /**
  * Main controller for the Car Pooling service.
@@ -48,10 +54,21 @@ public class CarPoolingController {
     @PutMapping(value = "/cars", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Void> putCars(@RequestBody List<Car> cars) {
         try {
+            if (cars == null) {
+                throw new InvalidPayloadException("Cars list cannot be null");
+            }
+
+            int carCount = cars.size();
+            if (carCount == 0) {
+                throw new InvalidPayloadException("Cars list cannot be empty");
+            }
+
             validateCars(cars);
             carService.load(cars);
             return ResponseEntity.ok().build();
         } catch (InvalidPayloadException e) {
+            org.slf4j.LoggerFactory.getLogger(CarPoolingController.class)
+                .error("Invalid payload in PUT /cars: {}", e.getMessage());
             return ResponseEntity.badRequest().build();
         }
     }
@@ -64,7 +81,7 @@ public class CarPoolingController {
     public ResponseEntity<Void> postJourney(@RequestBody Journey journey) {
         try {
             validateJourney(journey);
-            
+
             int groupId = journey.getId();
             int people = journey.getPeople();
 
@@ -122,7 +139,7 @@ public class CarPoolingController {
      * POST /locate
      * Get the car assigned to a group.
      */
-    @PostMapping(value = "/locate", 
+    @PostMapping(value = "/locate",
                  consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
                  produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Car> postLocate(@RequestParam(value = "ID", required = false) Integer groupId) {
@@ -154,14 +171,19 @@ public class CarPoolingController {
      * Validate the list of cars in PUT /cars request.
      */
     private void validateCars(List<Car> cars) {
-        if (cars == null) {
-            throw new InvalidPayloadException("Cars list cannot be null");
-        }
-
+        int index = 0;
         for (Car car : cars) {
-            if (car.getId() <= 0 || car.getSeats() < 4 || car.getSeats() > 6) {
-                throw new InvalidPayloadException("Invalid car: id must be positive, seats must be between 4 and 6");
+            if (car == null) {
+                throw new InvalidPayloadException(String.format("Car at index %d is null", index));
             }
+            if (car.getId() <= 0) {
+                throw new InvalidPayloadException(String.format("Car at index %d has invalid id: %d (must be positive)", index, car.getId()));
+            }
+            if (car.getSeats() < 4 || car.getSeats() > 6) {
+                throw new InvalidPayloadException(String.format("Car at index %d (id=%d) has invalid seats: %d (must be between 4 and 6)",
+                    index, car.getId(), car.getSeats()));
+            }
+            index++;
         }
     }
 
