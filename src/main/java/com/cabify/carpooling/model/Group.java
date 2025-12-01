@@ -1,22 +1,16 @@
 package com.cabify.carpooling.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 /**
- * Represents a journey request (equivalent to Group in business logic).
- * This model is used for JSON deserialization from POST /journey requests.
+ * Represents a group of people requesting a journey.
  */
-public class Journey {
-    @JsonProperty("id")
+public class Group {
     private int id;
-    
-    @JsonProperty("people")
     private int people;
 
-    public Journey() {
+    public Group() {
     }
 
-    public Journey(int id, int people) {
+    public Group(int id, int people) {
         this.id = id;
         this.people = people;
     }

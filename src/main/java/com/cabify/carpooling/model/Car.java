@@ -1,32 +1,46 @@
 package com.cabify.carpooling.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+/**
+ * Represents a car with a certain number of seats.
+ */
 public class Car {
+    @JsonProperty("id")
     private int id;
-    private int maxSeats;
-    private int availableSeats;    
+    
+    @JsonProperty("seats")
+    private int seats;
+    
+    @JsonIgnore
+    private int availableSeats;
+
+    public Car() {
+    }
 
     public Car(int id, int seats) {
         this.id = id;
-        this.maxSeats = seats;
+        this.seats = seats;
         this.availableSeats = seats;
     }
 
-    public int getID() {
+    public int getId() {
         return id;
     }
 
-    public void setID(int id) {
+    public void setId(int id) {
         this.id = id;
     }
-    
-    public int getMaxSeats() {
-        return maxSeats;
+
+    public int getSeats() {
+        return seats;
     }
 
-    public void setMaxSeats(int maxSeats) {
-        this.maxSeats = maxSeats;
+    public void setSeats(int seats) {
+        this.seats = seats;
+        this.availableSeats = seats;
     }
-
 
     public int getAvailableSeats() {
         return availableSeats;

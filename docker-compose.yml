@@ -1,7 +1,36 @@
-version: '3'
+version: '3.8'
+
 services:
+  # Main application service
   pooling:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: car-pooling:latest
-  harness:
-    image: cabify/challenge:latest
-    command: /harness --address http://pooling:8080 acceptance
+    container_name: car-pooling-dev
+    ports:
+      - "9091:9091"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JAVA_OPTS=-Xmx512m -Xms256m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9091/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # Harness for acceptance tests (only available in Cabify CI/CD)
+  # This service is commented out because the image is not publicly available.
+  # It will be used automatically when running in GitLab CI.
+  #
+  # To use it locally (if you have access to the image):
+  # 1. Uncomment the lines below
+  # 2. Run: docker-compose up
+  #
+  # harness:
+  #   image: cabify/challenge:latest
+  #   command: /harness --address http://pooling:9091 acceptance
+  #   depends_on:
+  #     pooling:
+  #       condition: service_healthy

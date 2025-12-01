@@ -1,84 +1,176 @@
 package com.cabify.carpooling.controller;
 
-import java.util.List;
-import java.util.NoSuchElementException;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
-
+import com.cabify.carpooling.exception.ExistingGroupException;
+import com.cabify.carpooling.exception.GroupNotFoundException;
+import com.cabify.carpooling.exception.InvalidPayloadException;
 import com.cabify.carpooling.model.Car;
 import com.cabify.carpooling.model.Journey;
-import com.cabify.carpooling.service.CarPoolingService;
+import com.cabify.carpooling.service.CarService;
+import com.cabify.carpooling.service.GroupService;
+import com.cabify.carpooling.service.JourneyService;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
+/**
+ * Main controller for the Car Pooling service.
+ */
 @RestController
-@RequestMapping("/*")
 public class CarPoolingController {
 
-  @Autowired private CarPoolingService carJourneyService;
+    private final CarService carService;
+    private final GroupService groupService;
+    private final JourneyService journeyService;
 
-  @GetMapping("/status")
-  @ResponseStatus(HttpStatus.OK)
-  public void getStatus() {}
+    public CarPoolingController(CarService carService,
+                               GroupService groupService,
+                               JourneyService journeyService) {
+        this.carService = carService;
+        this.groupService = groupService;
+        this.journeyService = journeyService;
+    }
 
-  @PutMapping(value = "/cars", consumes = MediaType.APPLICATION_JSON_VALUE)
-  @ResponseStatus(HttpStatus.OK)
-  public void putCars(@RequestBody List<Car> cars) {    
-    carJourneyService.Reset_Cars(cars);
-  }
+    /**
+     * GET /status
+     * Health check endpoint.
+     */
+    @GetMapping("/status")
+    public ResponseEntity<Void> getStatus() {
+        return ResponseEntity.ok().build();
+    }
 
-  @PostMapping("/journey")
-  public ResponseEntity<Void> postJourney(@RequestBody Journey journey) {
-    if (journey.getId() <= 0) {
-      return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+    /**
+     * PUT /cars
+     * Load the list of available cars and reset application state.
+     */
+    @PutMapping(value = "/cars", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> putCars(@RequestBody List<Car> cars) {
+        try {
+            validateCars(cars);
+            carService.load(cars);
+            return ResponseEntity.ok().build();
+        } catch (InvalidPayloadException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
-    carJourneyService.newJourney(journey);
-    return new ResponseEntity<>(HttpStatus.ACCEPTED);
-  }
 
-  @PostMapping("/dropoff")
-  public ResponseEntity<Void> postDropoff(@RequestParam("ID") int journeyID) {
-    if (journeyID <= 0) {
-      return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-    }
-    try {
-      Car car = carJourneyService.dropoff(journeyID);
-      if (car != null) {
-        carJourneyService.reassign(car);
-      }
-      return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-    } catch (NoSuchElementException e) {
-      return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-    }
-  }
+    /**
+     * POST /journey
+     * Register a group requesting a journey.
+     */
+    @PostMapping(value = "/journey", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> postJourney(@RequestBody Journey journey) {
+        try {
+            validateJourney(journey);
+            
+            int groupId = journey.getId();
+            int people = journey.getPeople();
 
-  @PostMapping(
-      value = "/locate",
-      consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
-      produces = "application/json")
-  @ResponseStatus(HttpStatus.OK)
-  public @ResponseBody ResponseEntity<Car> postLocate(@RequestParam("ID") final int journeyID) {
-    if (journeyID <= 0) {
-      return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            // Check if group already exists
+            if (groupService.getPeople(groupId) != null) {
+                throw new ExistingGroupException();
+            }
+
+            // Register group and request journey
+            groupService.add(groupId, people);
+            journeyService.request(groupId, people);
+
+            return ResponseEntity.ok().build();
+        } catch (InvalidPayloadException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (ExistingGroupException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
-    try {
-      Car car = carJourneyService.locate(journeyID);
-      if (car == null) {
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-      }
-      return new ResponseEntity<>(car, HttpStatus.OK);
-    } catch (NoSuchElementException e) {
-      return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+
+    /**
+     * POST /dropoff
+     * Unregister a group (whether they traveled or not).
+     */
+    @PostMapping(value = "/dropoff", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    public ResponseEntity<Void> postDropoff(@RequestParam(value = "ID", required = false) Integer groupId) {
+        try {
+            if (groupId == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            // Check if group exists
+            Integer people = groupService.getPeople(groupId);
+            if (people == null) {
+                throw new GroupNotFoundException();
+            }
+
+            // Check if group has traveled
+            Integer carId = journeyService.getCar(groupId);
+            if (carId != null) {
+                journeyService.remove(groupId);
+                journeyService.updateCarAllocation(carId, people);
+            }
+
+            // Remove group
+            groupService.remove(groupId);
+
+            return ResponseEntity.ok().build();
+        } catch (GroupNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
-  }
+
+    /**
+     * POST /locate
+     * Get the car assigned to a group.
+     */
+    @PostMapping(value = "/locate", 
+                 consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
+                 produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Car> postLocate(@RequestParam(value = "ID", required = false) Integer groupId) {
+        try {
+            if (groupId == null) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            // Check if group exists
+            if (groupService.getPeople(groupId) == null) {
+                throw new GroupNotFoundException();
+            }
+
+            // Check if group is still waiting
+            Integer carId = journeyService.getCar(groupId);
+            if (carId == null) {
+                return ResponseEntity.noContent().build();
+            }
+
+            // Get the car the group is traveling in
+            Car car = carService.get(carId);
+            return ResponseEntity.ok(car);
+        } catch (GroupNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * Validate the list of cars in PUT /cars request.
+     */
+    private void validateCars(List<Car> cars) {
+        if (cars == null) {
+            throw new InvalidPayloadException("Cars list cannot be null");
+        }
+
+        for (Car car : cars) {
+            if (car.getId() <= 0 || car.getSeats() < 4 || car.getSeats() > 6) {
+                throw new InvalidPayloadException("Invalid car: id must be positive, seats must be between 4 and 6");
+            }
+        }
+    }
+
+    /**
+     * Validate the journey payload in POST /journey request.
+     */
+    private void validateJourney(Journey journey) {
+        if (journey == null || journey.getId() <= 0 || journey.getPeople() < 1 || journey.getPeople() > 6) {
+            throw new InvalidPayloadException("Invalid journey: id must be positive, people must be between 1 and 6");
+        }
+    }
 }

@@ -1,0 +1,9 @@
+target/
+.git/
+.gitignore
+.idea/
+*.iml
+*.log
+.DS_Store
+OLD_PHP/
+node_modules/

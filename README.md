@@ -1,71 +1,91 @@
-# Car Pooling Service
+# Car Pooling Service - Java Spring Boot Implementation
 
-## Introduction 
+A high-performance car pooling service built with Java Spring Boot, designed to efficiently manage car availability and group assignments for ride-sharing operations.
 
-This service implements a Car Pooling service. 
+## Architecture Overview
 
-The Car Pooling service implements a very simple API that can be used to track the assignment of cars to journeys according to the seat capacity of the cars and the number of people that will travel in each journey.
+### Technology Stack
 
-Cars can have 4, 5 or 6 seats.
+- **Framework**: Spring Boot 3.x
+- **Language**: Java 17+
+- **Storage**: In-memory (thread-safe with ConcurrentHashMap and synchronized methods)
+- **Build Tool**: Maven
+- **Testing**: JUnit 5
 
-People request journeys in groups of 1 to 6. People in the same group want to ride on the same car. You can take any group at any car that has enough empty seats for them, no matter their current location. If it's not possible to accommodate them, they're willing to wait until there is a car available for them. Once a car is available for a group that is waiting, they should ride.
+### Key Architectural Decisions
 
-Once they get a car assigned, they will journey until the drop off, you cannot ask them to take another car (i.e. you cannot swap them to another car to make space for another group).
+#### 1. Layered Architecture
 
-In terms of fairness of trip order: groups should be served as fast as possible, but the arrival order should be kept when possible. If group B arrives later than group A, it can only be served before group A if no car can serve group A.
+The service follows a clean layered architecture:
 
-For example: a group of 6 is waiting for a car and there are 4 empty seats at a car for 6; if a group of 2 requests a car you may take them in the car. This may mean that the group of 6 waits a long time, possibly until they become frustrated and leave.
+- **Controller Layer**: Handles HTTP requests and responses
+- **Service Layer**: Contains business logic and orchestration
+- **Repository Layer**: Manages data persistence (in-memory)
+- **Model Layer**: Domain entities (Car, Group, Journey)
 
-## API
+#### 2. In-Memory Storage with Thread Safety
 
-The interface provided by the service is a RESTfull API. The operations are as follows.
+The service uses **in-memory storage** with thread-safe implementations:
+
+- `ConcurrentHashMap` for main storage structures
+- `synchronized` methods for operations requiring atomicity
+- `LinkedHashMap` for maintaining insertion order (FIFO) in the waiting queue
+
+**Storage Components**:
+- **CarRepository**: Car definitions and availability tracking
+- **GroupRepository**: Registered groups and waiting queue with people counter optimization
+- **JourneyRepository**: Active journey assignments (group_id → car_id mapping)
+
+#### 3. Performance Optimizations
+
+1. **Binary Search for Car Selection**: Uses binary search on sorted availability map for O(log n) car finding
+2. **Ordered Availability Map**: Cars sorted by available seats (descending) for optimal allocation
+3. **People Counter Index**: Fast lookup to determine if groups can be allocated without iterating entire queue
+4. **Minimal Data Structures**: Only essential data stored, reducing memory footprint
+
+#### 4. Scalability Approach
+
+The solution is designed to handle **10^4 to 10^5 cars and waiting groups** efficiently:
+
+- **Memory Efficiency**: In-memory storage with efficient data structures
+- **Algorithm Efficiency**:
+  - Car finding: O(log n) with binary search
+  - Queue processing: O(n) but optimized with early termination
+  - State updates: O(1) for individual operations
+- **Thread Safety**: Proper synchronization for concurrent request handling
+- **No External Dependencies**: No database queries or cache network calls
+
+## API Endpoints
 
 ### GET /status
 
-Indicate the service has started up correctly and is ready to accept requests.
+Health check endpoint indicating service readiness.
 
-Responses:
-
-* **200 OK** When the service is ready to receive requests.
+**Response**: `200 OK`
 
 ### PUT /cars
 
-Load the list of available cars in the service and remove all previous data (existing journeys and cars). This method may be called more than once during the life cycle of the service.
+Loads the list of available cars and resets application state.
 
-**Body** _required_ The list of cars to load.
-
-**Content Type** `application/json`
-
-Sample:
-
+**Request Body**:
 ```json
 [
-  {
-    "id": 1,
-    "seats": 4
-  },
-  {
-    "id": 2,
-    "seats": 6
-  }
+  { "id": 1, "seats": 4 },
+  { "id": 2, "seats": 6 }
 ]
 ```
 
-Responses:
+**Validations**:
+- Cars must have seats between 4 and 6
+- Car IDs must be positive integers
 
-* **200 OK** When the list is registered correctly.
-* **400 Bad Request** When there is a failure in the request format, expected headers, or the payload can't be unmarshalled.
+**Response**: `200 OK` or `400 Bad Request`
 
 ### POST /journey
 
-A group of people requests to perform a journey.
+Registers a group requesting a journey.
 
-**Body** _required_ The group of people that wants to perform the journey
-
-**Content Type** `application/json`
-
-Sample:
-
+**Request Body**:
 ```json
 {
   "id": 1,
@@ -73,39 +93,415 @@ Sample:
 }
 ```
 
-Responses:
+**Validations**:
+- People count must be between 1 and 6
+- Group ID must be a positive integer
+- Group ID must be unique
 
-* **200 OK** or **202 Accepted** When the group is registered correctly
-* **400 Bad Request** When there is a failure in the request format or the payload can't be unmarshalled.
+**Response**: `200 OK` or `400 Bad Request`
 
 ### POST /dropoff
 
-A group of people requests to be dropped off. Whether they traveled or not.
+Removes a group from the system (whether traveling or waiting).
 
-**Body** _required_ A form with the group ID, such that `ID=X`
+**Request Body** (form-urlencoded): `ID=1`
 
-**Content Type** `application/x-www-form-urlencoded`
-
-Responses:
-
-* **200 OK** or **204 No Content** When the group is unregistered correctly.
-* **404 Not Found** When the group is not to be found.
-* **400 Bad Request** When there is a failure in the request format or the payload can't be unmarshalled.
+**Response**:
+- `200 OK` - Group successfully dropped off
+- `404 Not Found` - Group doesn't exist
+- `400 Bad Request` - Invalid request
 
 ### POST /locate
 
-Given a group ID such that `ID=X`, return the car the group is traveling
-with, or no car if they are still waiting to be served.
+Returns the car assigned to a group, or indicates they're waiting.
 
-**Body** _required_ A url encoded form with the group ID such that `ID=X`
+**Request Body** (form-urlencoded): `ID=1`
 
-**Content Type** `application/x-www-form-urlencoded`
+**Response**:
+- `200 OK` with car JSON if assigned
+  ```json
+  {
+    "id": 1,
+    "seats": 4
+  }
+  ```
+- `204 No Content` if waiting
+- `404 Not Found` if group doesn't exist
+- `400 Bad Request` if request is invalid
 
-**Accept** `application/json`
+## Business Logic
 
-Responses:
+### Car Assignment Algorithm
 
-* **200 OK** With the car as the payload when the group is assigned to a car.
-* **204 No Content** When the group is waiting to be assigned to a car.
-* **404 Not Found** When the group is not to be found.
-* **400 Bad Request** When there is a failure in the request format or the payload can't be unmarshalled.
+When a group requests a journey:
+
+1. **Check Availability**: Use binary search on sorted availability map to find the best-fitting car
+2. **Direct Assignment**: If a suitable car is found, assign immediately and update availability
+3. **Queue**: If no car is available, add group to waiting queue (FIFO)
+
+### Dropoff and Reassignment
+
+When a group is dropped off:
+
+1. **Free Seats**: Release the seats occupied by the group
+2. **Queue Processing**: Select optimal set of waiting groups that can fit in the freed seats
+3. **Assignment**: Assign groups from queue in FIFO order, maximizing seat utilization
+
+### Fairness Strategy
+
+Groups are served in FIFO order when possible, but a smaller group may be served before a larger one if:
+- No car can accommodate the larger group
+- A car is available that fits the smaller group
+
+This prevents indefinite waiting for large groups while maximizing resource utilization.
+
+## Running the Service
+
+### Prerequisites
+
+- **Docker** (required)
+- Java 17 and Maven 3.6+ (optional, only if you want to run without Docker)
+
+### Quick Start (Recommended)
+
+```bash
+# See all available commands
+make help
+
+# Start the development server
+make dev
+
+# Check service health
+make status
+
+# Test API endpoints
+make test-api
+
+# View logs
+make logs
+
+# Stop the server
+make stop
+```
+
+The service runs on port `9091` by default.
+
+### Available Make Commands
+
+#### Development
+- `make dev` - Start development server with Docker
+- `make logs` - Show server logs in real-time
+- `make stop` - Stop the server
+- `make restart` - Restart the server
+- `make ssh` - Enter the container for debugging
+
+#### Testing
+- `make test` - Run all unit and integration tests
+- `make test-api` - Test API endpoints (requires running server)
+
+#### Production
+- `make build` - Build production Docker image
+- `make run` - Run production container
+
+#### Utilities
+- `make status` - Check service health
+- `make info` - Show project information
+- `make clean` - Clean up containers and images
+- `make clean-all` - Deep clean including build artifacts
+
+### Configuration
+
+Application configuration can be found in `src/main/resources/application.properties`:
+
+```properties
+server.port=9091
+spring.application.name=car-pooling
+logging.level.com.cabify.carpooling=INFO
+```
+
+## Testing
+
+The project includes comprehensive test coverage:
+
+### Unit Tests
+
+- `MapHelperTest`: Tests for binary search and map sorting utilities
+- `CarServiceTest`: Tests for car finding and availability management
+- `GroupServiceTest`: Tests for group selection and queue management
+
+### Integration Tests
+
+- `CarPoolingApplicationTests`: Basic integration tests
+- `CarPoolingControllerIntegrationTest`: Comprehensive API endpoint tests
+
+### Running Tests
+
+```bash
+# Run all tests (in Docker)
+make test
+
+# Test API endpoints (requires running server)
+make dev          # Start server first
+make test-api     # Run API tests
+
+# Or use the test script
+./test-api.sh
+```
+
+### Manual Testing with curl
+
+```bash
+# 1. Start the server
+make dev
+
+# 2. Health check
+curl http://localhost:9091/status
+
+# 3. Load cars
+curl -X PUT http://localhost:9091/cars \
+  -H "Content-Type: application/json" \
+  -d '[{"id":1,"seats":4},{"id":2,"seats":6}]'
+
+# 4. Request journey
+curl -X POST http://localhost:9091/journey \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"people":4}'
+
+# 5. Locate group
+curl -X POST http://localhost:9091/locate \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "ID=1"
+
+# 6. Dropoff
+curl -X POST http://localhost:9091/dropoff \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "ID=1"
+```
+
+## Project Structure
+
+```
+src/
+├── main/
+│   ├── java/
+│   │   └── com/cabify/carpooling/
+│   │       ├── controller/          # REST controllers
+│   │       │   └── CarPoolingController.java
+│   │       ├── service/             # Business logic
+│   │       │   ├── CarService.java
+│   │       │   ├── GroupService.java
+│   │       │   └── JourneyService.java
+│   │       ├── repository/          # Data access
+│   │       │   ├── CarRepository.java
+│   │       │   ├── GroupRepository.java
+│   │       │   ├── JourneyRepository.java
+│   │       │   ├── InMemoryCarRepository.java
+│   │       │   ├── InMemoryGroupRepository.java
+│   │       │   └── InMemoryJourneyRepository.java
+│   │       ├── model/               # Domain entities
+│   │       │   ├── Car.java
+│   │       │   ├── Group.java
+│   │       │   └── Journey.java
+│   │       ├── exception/           # Custom exceptions
+│   │       │   ├── ExistingGroupException.java
+│   │       │   ├── GroupNotFoundException.java
+│   │       │   ├── InvalidPayloadException.java
+│   │       │   └── DuplicatedIdException.java
+│   │       ├── util/                # Utilities
+│   │       │   └── MapHelper.java
+│   │       └── CarPoolingApplication.java
+│   └── resources/
+│       └── application.properties
+└── test/
+    └── java/
+        └── com/cabify/carpooling/
+            ├── service/             # Unit tests
+            ├── controller/          # Integration tests
+            └── util/                # Utility tests
+```
+
+## Logging and Observability
+
+The service includes structured logging focused on the **business logic layer**:
+
+### Business Events (Service Layer)
+- Journey requests and assignments
+- Car allocations and updates
+- Dropoff processing
+- Queue operations
+- State resets (car loading)
+
+### Performance Metrics
+- Operation timing (car finding, allocation, queue processing)
+- Request duration for key operations
+- Queue size and allocation statistics
+
+### Log Levels
+- **INFO**: Important business operations (journey assignments, dropoffs, state changes)
+- **DEBUG**: Detailed operation information (car finding, queue processing, allocations)
+- **WARN**: Business rule violations (duplicate groups, already assigned journeys)
+- **ERROR**: Exceptions and failures
+
+## Performance Characteristics
+
+- **Car Finding**: O(log n) using binary search on sorted availability map
+- **Journey Assignment**: O(1) for direct assignment, O(n) for queue processing (optimized with early termination)
+- **State Updates**: O(1) for individual operations
+- **Memory**: Efficient in-memory storage with minimal overhead
+- **Concurrency**: Thread-safe operations support multiple concurrent requests
+
+## Design Decisions
+
+### Why In-Memory Storage?
+
+- **Performance**: Sub-millisecond response times
+- **Simplicity**: No external dependencies, easier to deploy and test
+- **Scalability**: Sufficient for the required scale (10^4-10^5 entities)
+- **Thread Safety**: Proper synchronization ensures data consistency
+
+### Why Binary Search for Car Finding?
+
+- **Efficiency**: O(log n) vs O(n) linear search
+- **Optimal Allocation**: Sorted by available seats ensures best-fit allocation
+- **Scalability**: Performance doesn't degrade significantly with large car counts
+
+### Why Separate Repository Layer?
+
+- **Separation of Concerns**: Clear distinction between business logic and data access
+- **Testability**: Easy to mock repositories for unit testing
+- **Maintainability**: Changes to storage implementation don't affect business logic
+- **Flexibility**: Easy to swap storage implementation (e.g., to database) if needed
+
+## Migration from PHP Implementation
+
+This Java implementation is based on a PHP Laravel + Octane solution. Key similarities:
+
+- **Architecture**: Same layered architecture (Controllers, Services, Repositories)
+- **Algorithms**: Identical binary search and queue processing algorithms
+- **Business Logic**: Same fairness rules and assignment strategy
+- **API Contract**: Fully compatible REST API
+
+Key differences:
+
+- **Storage**: ConcurrentHashMap instead of Swoole Tables
+- **Concurrency**: Java synchronization instead of Swoole workers
+- **Framework**: Spring Boot instead of Laravel Octane
+
+## Development Workflow
+
+### Typical Development Session
+
+```bash
+# 1. Start the server
+make dev
+
+# 2. In another terminal, watch logs
+make logs
+
+# 3. Make code changes...
+
+# 4. Restart to apply changes
+make restart
+
+# 5. Test your changes
+make test-api
+
+# 6. Run unit tests
+make test
+
+# 7. When finished
+make stop
+```
+
+### Debugging
+
+```bash
+# Enter the container
+make ssh
+
+# Inside the container you can:
+# - Check Java version: java -version
+# - View application files: ls -la /app
+# - Check processes: ps aux
+# - Exit: exit
+```
+
+### Docker Compose (Optional)
+
+The project includes a `docker-compose.yml` for CI/CD integration with Cabify's test harness. For local development, you don't need it - just use `make dev`.
+
+The harness service is commented out because the image (`cabify/challenge:latest`) is only available in Cabify's internal registry. It will be used automatically in GitLab CI.
+
+## Production Readiness Recommendations
+
+1. **Monitoring & Alerting**
+   - Integrate with APM tools (New Relic, Datadog, etc.)
+   - Set up alerts for error rates, response times, queue sizes
+   - Monitor memory usage and thread pool health
+
+2. **Metrics Collection**
+   - Expose Prometheus metrics endpoint
+   - Track: request rate, latency, queue size, car utilization
+   - Monitor JVM metrics (heap, GC, threads)
+
+3. **High Availability**
+   - Run multiple instances behind load balancer
+   - Consider distributed cache (Redis) for shared state if multi-instance is needed
+   - Implement graceful shutdown handling
+
+4. **Security**
+   - Add authentication/authorization if needed
+   - Implement rate limiting
+   - Input validation and sanitization
+
+5. **Performance Tuning**
+   - Tune thread pool sizes based on load
+   - Monitor and adjust JVM memory settings
+   - Profile and optimize hot paths
+
+## Troubleshooting
+
+### Port Already in Use
+
+```bash
+# Find what's using port 9091
+lsof -i :9091
+
+# Kill the process or change PORT in Makefile
+```
+
+### Container Won't Start
+
+```bash
+# Check logs for errors
+make logs
+
+# Rebuild from scratch
+make clean-all
+make dev
+```
+
+### Changes Not Reflected
+
+```bash
+# Full restart
+make restart
+```
+
+## Quick Reference
+
+| Command | Description |
+|---------|-------------|
+| `make help` | Show all available commands |
+| `make dev` | Start development server |
+| `make logs` | View server logs |
+| `make status` | Check if service is running |
+| `make test-api` | Test all endpoints |
+| `make test` | Run unit tests |
+| `make ssh` | Enter container |
+| `make stop` | Stop server |
+| `make clean` | Clean up |
+
+## License
+
+This project is part of a coding challenge for Cabify.
