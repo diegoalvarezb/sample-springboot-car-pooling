@@ -17,16 +17,17 @@ import java.util.List;
  */
 @Service
 public class CarService {
-    
+
     private static final Logger log = LoggerFactory.getLogger(CarService.class);
 
     private final CarRepository carRepository;
     private final GroupRepository groupRepository;
     private final JourneyRepository journeyRepository;
 
-    public CarService(CarRepository carRepository, 
-                     GroupRepository groupRepository,
-                     JourneyRepository journeyRepository) {
+    public CarService(
+            CarRepository carRepository,
+            GroupRepository groupRepository,
+            JourneyRepository journeyRepository) {
         this.carRepository = carRepository;
         this.groupRepository = groupRepository;
         this.journeyRepository = journeyRepository;
@@ -73,10 +74,11 @@ public class CarService {
 
         // Get the first value (highest available seats)
         Integer maxAvailableSeats = availability.values().iterator().next();
-        
+
         if (maxAvailableSeats < seats) {
             long duration = System.currentTimeMillis() - startTime;
-            log.debug("No car found for requested seats. requested_seats={}, max_available_seats={}, available_cars_count={}, duration_ms={}", 
+            log.debug(
+                    "No car found for requested seats. requested_seats={}, max_available_seats={}, available_cars_count={}, duration_ms={}",
                     seats, maxAvailableSeats, availableCarsCount, duration);
             return null;
         }
@@ -84,7 +86,8 @@ public class CarService {
         Integer carId = MapHelper.binarySearchOrNext(availability, seats);
         long duration = System.currentTimeMillis() - startTime;
 
-        log.debug("Car found for journey. requested_seats={}, car_id={}, available_seats={}, available_cars_count={}, duration_ms={}", 
+        log.debug(
+                "Car found for journey. requested_seats={}, car_id={}, available_seats={}, available_cars_count={}, duration_ms={}",
                 seats, carId, availability.get(carId), availableCarsCount, duration);
 
         return carId;

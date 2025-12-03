@@ -1,22 +1,23 @@
-package com.cabify.carpooling.model;
+package com.cabify.carpooling.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * Represents a journey request (equivalent to Group in business logic).
- * This model is used for JSON deserialization from POST /journey requests.
+ * Data Transfer Object for Journey API requests.
+ * Represents a journey request from POST /journey endpoint.
  */
-public class Journey {
+public final class JourneyDTO {
+
     @JsonProperty("id")
     private int id;
-    
+
     @JsonProperty("people")
     private int people;
 
-    public Journey() {
+    public JourneyDTO() {
     }
 
-    public Journey(int id, int people) {
+    public JourneyDTO(int id, int people) {
         this.id = id;
         this.people = people;
     }

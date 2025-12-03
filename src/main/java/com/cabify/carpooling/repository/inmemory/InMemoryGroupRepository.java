@@ -1,5 +1,6 @@
-package com.cabify.carpooling.repository;
+package com.cabify.carpooling.repository.inmemory;
 
+import com.cabify.carpooling.repository.GroupRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.LinkedHashMap;
@@ -31,7 +32,7 @@ public class InMemoryGroupRepository implements GroupRepository {
     public synchronized void remove(int groupId) {
         Integer people = groups.remove(groupId);
         waitingQueue.remove(groupId);
-        
+
         if (people != null) {
             decrementPeopleCounter(people);
         }
@@ -46,10 +47,12 @@ public class InMemoryGroupRepository implements GroupRepository {
     public synchronized boolean areThereGroupsForAllocation(int seats) {
         for (int people = seats; people > 0; people--) {
             Integer count = peopleCounter.get(people);
+
             if (count != null && count > 0) {
                 return true;
             }
         }
+
         return false;
     }
 
@@ -57,14 +60,13 @@ public class InMemoryGroupRepository implements GroupRepository {
     public synchronized void replaceQueue(LinkedHashMap<Integer, Integer> queue) {
         waitingQueue.clear();
         peopleCounter.clear();
-        
+
         for (Map.Entry<Integer, Integer> entry : queue.entrySet()) {
             int groupId = entry.getKey();
             int people = entry.getValue();
-            
+
             waitingQueue.put(groupId, people);
-            
-            // Update counter
+
             peopleCounter.put(people, peopleCounter.getOrDefault(people, 0) + 1);
         }
     }
@@ -78,6 +80,7 @@ public class InMemoryGroupRepository implements GroupRepository {
     @Override
     public synchronized void dequeue(int groupId) {
         Integer people = waitingQueue.remove(groupId);
+
         if (people != null) {
             decrementPeopleCounter(people);
         }
@@ -92,10 +95,11 @@ public class InMemoryGroupRepository implements GroupRepository {
 
     private void decrementPeopleCounter(int people) {
         Integer count = peopleCounter.get(people);
+
         if (count == null || count == 0) {
             return;
         }
-        
+
         int newCount = Math.max(0, count - 1);
         if (newCount == 0) {
             peopleCounter.remove(people);

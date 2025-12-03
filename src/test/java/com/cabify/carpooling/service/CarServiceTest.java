@@ -44,8 +44,7 @@ class CarServiceTest {
         List<Car> cars = Arrays.asList(
                 new Car(1, 4),
                 new Car(2, 5),
-                new Car(3, 6)
-        );
+                new Car(3, 6));
         carService.load(cars);
 
         Integer carId = carService.findCar(4);
@@ -58,8 +57,7 @@ class CarServiceTest {
         List<Car> cars = Arrays.asList(
                 new Car(1, 4),
                 new Car(2, 5),
-                new Car(3, 6)
-        );
+                new Car(3, 6));
         carService.load(cars);
 
         Integer carId = carService.findCar(3);
@@ -71,8 +69,7 @@ class CarServiceTest {
     void testFindCar_NoAvailableCar() {
         List<Car> cars = Arrays.asList(
                 new Car(1, 4),
-                new Car(2, 5)
-        );
+                new Car(2, 5));
         carService.load(cars);
 
         Integer carId = carService.findCar(6);
@@ -91,12 +88,11 @@ class CarServiceTest {
     void testUpdateAvailableSeats() {
         List<Car> cars = Arrays.asList(
                 new Car(1, 6),
-                new Car(2, 4)
-        );
+                new Car(2, 4));
         carService.load(cars);
 
         carService.updateAvailableSeats(1, -4);
-        
+
         assertEquals(2, carService.getAvailableSeats(1));
         assertEquals(4, carService.getAvailableSeats(2));
     }

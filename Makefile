@@ -14,6 +14,11 @@ help:	### Show available commands
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 # Development
+compile:	### Compile Java files (use after editing code)
+	@echo "⚙️  Compiling Java files..."
+	@docker exec $(CONTAINER) mvn compile -q
+	@echo "✅ Compiled - DevTools will auto-restart in 2-3 seconds"
+
 dev:	### Start server (production mode, no live reload)
 	@echo "🚀 Starting server..."
 	@docker stop $(CONTAINER) 2>/dev/null || true
@@ -34,17 +39,8 @@ dev-live:	### Start with live reload (auto-reloads on code changes)
 		-v $$(pwd)/target:/app/target \
 		-v maven-cache:/root/.m2 \
 		$(IMAGE):latest \
-		sh -c "mvn compile && mvn spring-boot:run"
+		sh -c "mvn spring-boot:run"
 	@echo "✅ Server with live reload running at http://localhost:$(PORT)"
-	@echo ""
-	@echo "💡 After editing Java files, run: make compile"
-	@echo "   DevTools will auto-restart in ~2-3 seconds"
-
-compile:	### Compile Java files (use after editing code)
-	@echo "⚙️  Compiling Java files..."
-	@docker exec $(CONTAINER) mvn compile -q
-	@docker exec $(CONTAINER) touch /app/target/classes/.trigger
-	@echo "✅ Compiled - DevTools will auto-restart in 2-3 seconds"
 
 dev-debug:	### Start with debugging (port 5005)
 	@echo "🐛 Starting with debugging..."
@@ -56,6 +52,7 @@ dev-debug:	### Start with debugging (port 5005)
 		-p 5005:5005 \
 		-v $$(pwd)/src:/app/src \
 		-v $$(pwd)/pom.xml:/app/pom.xml \
+		-v $$(pwd)/target:/app/target \
 		-v maven-cache:/root/.m2 \
 		$(IMAGE):latest \
 		mvn spring-boot:run -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
@@ -91,9 +88,35 @@ restart:	### Restart the server container
 	@echo "✅ Server restarted"
 
 # Testing
-test:	### Run tests
+test:	### Run tests (smart: uses dev-live container or builds)
 	@echo "🧪 Running tests..."
-	@docker build -t $(IMAGE):test --target build .
+	@if docker exec $(CONTAINER) test -f /app/pom.xml 2>/dev/null; then \
+		echo "📦 Using running container..."; \
+		docker exec $(CONTAINER) mvn test; \
+	elif docker ps -q -f name=$(CONTAINER) > /dev/null 2>&1; then \
+		echo "⚠️  Container running in production mode (no source code)"; \
+		echo "📦 Building test image instead..."; \
+		docker build -t $(IMAGE):test --target build . && \
+		docker run --rm -v maven-cache:/root/.m2 $(IMAGE):test mvn test; \
+	else \
+		echo "📦 Building test image..."; \
+		docker build -t $(IMAGE):test --target build . && \
+		docker run --rm -v maven-cache:/root/.m2 $(IMAGE):test mvn test; \
+	fi
+
+test-quick:	### Run tests in running container (fastest, requires make dev-live)
+	@echo "🧪 Running quick tests..."
+	@if docker exec $(CONTAINER) test -f /app/pom.xml 2>/dev/null; then \
+		docker exec $(CONTAINER) mvn test; \
+	else \
+		echo "❌ Container not in dev mode. Start it with:"; \
+		echo "   make dev-live"; \
+		exit 1; \
+	fi
+
+test-ci:	### Run tests (clean build for CI/CD)
+	@echo "🧪 Running tests (CI mode)..."
+	@docker build --no-cache -t $(IMAGE):test --target build .
 	@docker run --rm $(IMAGE):test mvn test
 
 # Production

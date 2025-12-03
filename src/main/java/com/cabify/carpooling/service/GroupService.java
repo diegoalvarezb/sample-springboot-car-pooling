@@ -13,7 +13,7 @@ import java.util.Map;
  */
 @Service
 public class GroupService {
-    
+
     private static final Logger log = LoggerFactory.getLogger(GroupService.class);
 
     private final GroupRepository groupRepository;
@@ -77,7 +77,8 @@ public class GroupService {
 
         if (!result.isEmpty()) {
             int totalPeopleAllocated = result.values().stream().mapToInt(Integer::intValue).sum();
-            log.debug("Groups selected for allocation. available_seats={}, selected_groups_count={}, queue_size={}, total_people_allocated={}, remaining_seats={}, duration_ms={}", 
+            log.debug(
+                    "Groups selected for allocation. available_seats={}, selected_groups_count={}, queue_size={}, total_people_allocated={}, remaining_seats={}, duration_ms={}",
                     seats, result.size(), queueSize, totalPeopleAllocated, pendingSeats, duration);
         }
 

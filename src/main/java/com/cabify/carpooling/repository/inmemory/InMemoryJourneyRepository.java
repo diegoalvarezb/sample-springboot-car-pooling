@@ -1,5 +1,6 @@
-package com.cabify.carpooling.repository;
+package com.cabify.carpooling.repository.inmemory;
 
+import com.cabify.carpooling.repository.JourneyRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Map;

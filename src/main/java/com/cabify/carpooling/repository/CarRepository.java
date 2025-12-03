@@ -8,7 +8,7 @@ import java.util.List;
  * Repository interface for managing car data.
  */
 public interface CarRepository {
-    
+
     /**
      * Get a car by its ID.
      *

@@ -1,17 +1,31 @@
 package com.cabify.carpooling.exception;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
-
 /**
  * Exception thrown when attempting to register a group that already exists.
+ *
+ * <p>This exception is handled by {@link com.cabify.carpooling.controller.GlobalExceptionHandler}
+ * and returns HTTP 400 Bad Request.
+ *
+ * <p>This typically occurs when:
+ * <ul>
+ *   <li>A group with the same ID is already registered</li>
+ *   <li>Attempting to create a duplicate journey request</li>
+ * </ul>
  */
-@ResponseStatus(value = HttpStatus.BAD_REQUEST, reason = "Group already exists")
 public class ExistingGroupException extends RuntimeException {
+
+    /**
+     * Creates an exception with default message.
+     */
     public ExistingGroupException() {
         super("Group already exists");
     }
 
+    /**
+     * Creates an exception with a custom message.
+     *
+     * @param message The error message describing why the group already exists
+     */
     public ExistingGroupException(String message) {
         super(message);
     }

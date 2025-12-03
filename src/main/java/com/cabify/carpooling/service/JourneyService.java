@@ -13,16 +13,16 @@ import java.util.Map;
  */
 @Service
 public class JourneyService {
-    
+
     private static final Logger log = LoggerFactory.getLogger(JourneyService.class);
 
     private final CarService carService;
     private final GroupService groupService;
     private final JourneyRepository journeyRepository;
 
-    public JourneyService(CarService carService, 
-                         GroupService groupService,
-                         JourneyRepository journeyRepository) {
+    public JourneyService(CarService carService,
+            GroupService groupService,
+            JourneyRepository journeyRepository) {
         this.carService = carService;
         this.groupService = groupService;
         this.journeyRepository = journeyRepository;
@@ -61,7 +61,7 @@ public class JourneyService {
             carService.updateAvailableSeats(carId, people * -1);
 
             long duration = System.currentTimeMillis() - startTime;
-            log.info("Journey assigned successfully. group_id={}, people={}, car_id={}, duration_ms={}", 
+            log.info("Journey assigned successfully. group_id={}, people={}, car_id={}, duration_ms={}",
                     groupId, people, carId, duration);
             return;
         }
@@ -69,7 +69,7 @@ public class JourneyService {
         groupService.addToWaitingList(groupId, people);
 
         long duration = System.currentTimeMillis() - startTime;
-        log.info("Journey queued - no available car. group_id={}, people={}, duration_ms={}", 
+        log.info("Journey queued - no available car. group_id={}, people={}, duration_ms={}",
                 groupId, people, duration);
     }
 
@@ -102,8 +102,9 @@ public class JourneyService {
 
         long duration = System.currentTimeMillis() - startTime;
 
-        log.info("Car allocation updated after dropoff. car_id={}, new_free_seats={}, total_free_seats={}, groups_count={}, total_people_assigned={}, remaining_seats={}, assigned_groups=[{}], duration_ms={}", 
-                carId, newFreeSeats, totalFreeSeats, groups.size(), newAssignedSeats, 
+        log.info(
+                "Car allocation updated after dropoff. car_id={}, new_free_seats={}, total_free_seats={}, groups_count={}, total_people_assigned={}, remaining_seats={}, assigned_groups=[{}], duration_ms={}",
+                carId, newFreeSeats, totalFreeSeats, groups.size(), newAssignedSeats,
                 totalFreeSeats - newAssignedSeats, assignedGroups.toString(), duration);
     }
 }

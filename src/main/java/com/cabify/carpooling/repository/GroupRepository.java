@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
  * Repository interface for managing group data.
  */
 public interface GroupRepository {
-    
+
     /**
      * Get the number of people in a group.
      *

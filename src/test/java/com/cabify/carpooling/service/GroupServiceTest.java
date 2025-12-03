@@ -32,7 +32,7 @@ class GroupServiceTest {
         groupService.add(1, 1);
         groupService.add(2, 2);
         groupService.add(3, 4);
-        
+
         groupService.addToWaitingList(1, 1);
         groupService.addToWaitingList(2, 2);
         groupService.addToWaitingList(3, 4);
@@ -50,7 +50,7 @@ class GroupServiceTest {
         groupService.add(2, 4);
         groupService.add(3, 2);
         groupService.add(4, 1);
-        
+
         groupService.addToWaitingList(1, 6);
         groupService.addToWaitingList(2, 4);
         groupService.addToWaitingList(3, 2);
@@ -68,7 +68,7 @@ class GroupServiceTest {
         groupService.add(1, 4);
         groupService.add(2, 5);
         groupService.add(3, 6);
-        
+
         groupService.addToWaitingList(1, 4);
         groupService.addToWaitingList(2, 5);
         groupService.addToWaitingList(3, 6);
