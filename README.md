@@ -1,59 +1,73 @@
-# Car Pooling Service - Java Spring Boot Implementation
+# Car Pooling Service - Java Spring Boot
 
-A high-performance car pooling service built with Java Spring Boot, designed to efficiently manage car availability and group assignments for ride-sharing operations.
+A high-performance car pooling service built with Java Spring Boot, designed to efficiently manage car availability and group assignments for ride‑sharing operations.
 
 ## Architecture Overview
 
 ### Technology Stack
 
-- **Framework**: Spring Boot 3.x
-- **Language**: Java 17+
-- **Storage**: In-memory (thread-safe with ConcurrentHashMap and synchronized methods)
+- **Framework**: Spring Boot 2.7.x
+- **Language**: Java 11
+- **Storage**: In-memory
 - **Build Tool**: Maven
-- **Testing**: JUnit 5
+- **Testing**: JUnit 5 + Spring Boot Test
+- **Containerization**: Docker
 
-### Key Architectural Decisions
+### High-Level Design
 
-#### 1. Layered Architecture
+The service follows a **layered architecture**:
 
-The service follows a clean layered architecture:
+- **Controller Layer** (`controller`):
+  - Exposes the HTTP API.
+  - Maps requests/responses to DTOs.
+  - Centralized error handling via `GlobalExceptionHandler`.
+- **Service Layer** (`service`):
+  - Encapsulates business rules and orchestration.
+  - Coordinates cars, groups and journeys.
+- **Repository Layer** (`repository`):
+  - In-memory implementations for cars, groups and journeys.
+  - Responsible for concurrency control and efficient queries.
+- **Model & DTO Layer** (`model`, `dto`, `mapper`):
+  - `model` contains internal domain entities (e.g. `Car`).
+  - `dto` contains public API payloads (`CarDTO`, `JourneyDTO`).
+  - `mapper` converts between DTOs and models.
 
-- **Controller Layer**: Handles HTTP requests and responses
-- **Service Layer**: Contains business logic and orchestration
-- **Repository Layer**: Manages data persistence (in-memory)
-- **Model Layer**: Domain entities (Car, Group, Journey)
+### In-Memory Storage & Concurrency
 
-#### 2. In-Memory Storage with Thread Safety
+The system is designed to run **without an external database**, using in-memory repositories that are safe for concurrent access:
 
-The service uses **in-memory storage** with thread-safe implementations:
+- **Cars** (`InMemoryCarRepository`):
+  - Stores cars in a `ConcurrentHashMap<ID, Car>`.
+  - Uses **bucket-based indexing** by available seats (0–6) with `List<Set<Integer>>`:
+    - Each bucket holds car IDs with that many free seats.
+    - `LinkedHashSet` preserves insertion order (FIFO) for fair allocation.
+  - **Car lookup**: O(1) search by scanning buckets from `seats` to `MAX_SEATS`.
+  - Read/write access guarded with a `ReadWriteLock`.
 
-- `ConcurrentHashMap` for main storage structures
-- `synchronized` methods for operations requiring atomicity
-- `LinkedHashMap` for maintaining insertion order (FIFO) in the waiting queue
+- **Groups & Waiting Queue** (`InMemoryGroupRepository`):
+  - `groups`: `ConcurrentHashMap<groupId, people>` for fast group lookups.
+  - `waitingQueue`: `LinkedHashMap<groupId, people>` to preserve arrival order (FIFO).
+  - `peopleCounter`: `ConcurrentHashMap<people, count>` to quickly know if allocation is possible without scanning the whole queue.
+  - Methods that mutate the queue/state are synchronized to ensure atomic operations.
 
-**Storage Components**:
-- **CarRepository**: Car definitions and availability tracking
-- **GroupRepository**: Registered groups and waiting queue with people counter optimization
-- **JourneyRepository**: Active journey assignments (group_id → car_id mapping)
+- **Journeys** (`InMemoryJourneyRepository`):
+  - Maintains the association `groupId → carId` for active journeys.
+  - Provides constant-time checks to know if a group is traveling and in which car.
 
-#### 3. Performance Optimizations
+### Performance & Scalability
 
-1. **Binary Search for Car Selection**: Uses binary search on sorted availability map for O(log n) car finding
-2. **Ordered Availability Map**: Cars sorted by available seats (descending) for optimal allocation
-3. **People Counter Index**: Fast lookup to determine if groups can be allocated without iterating entire queue
-4. **Minimal Data Structures**: Only essential data stored, reducing memory footprint
+The solution is optimized for **10^5 – 10^6 cars and waiting groups**:
 
-#### 4. Scalability Approach
-
-The solution is designed to handle **10^4 to 10^5 cars and waiting groups** efficiently:
-
-- **Memory Efficiency**: In-memory storage with efficient data structures
-- **Algorithm Efficiency**:
-  - Car finding: O(log n) with binary search
-  - Queue processing: O(n) but optimized with early termination
-  - State updates: O(1) for individual operations
-- **Thread Safety**: Proper synchronization for concurrent request handling
-- **No External Dependencies**: No database queries or cache network calls
+- **Algorithmic complexity**:
+  - Car finding: **O(1)** using bucket-based indexing by available seats.
+  - Queue processing: **O(n)** in the worst case, with early termination using `peopleCounter`.
+  - State updates (assign/release seats, enqueue/dequeue groups): **O(1)**.
+- **Memory usage**:
+  - Only minimal data is stored for each car, group and journey.
+  - Avoids heavy frameworks or external caches.
+- **Concurrency**:
+  - Repositories are explicitly designed for concurrent access.
+  - Compound operations are guarded with locks or `synchronized` methods.
 
 ## API Endpoints
 
@@ -131,87 +145,92 @@ Returns the car assigned to a group, or indicates they're waiting.
 
 ## Business Logic
 
-### Car Assignment Algorithm
+### Car Assignment
 
 When a group requests a journey:
 
-1. **Check Availability**: Use binary search on sorted availability map to find the best-fitting car
-2. **Direct Assignment**: If a suitable car is found, assign immediately and update availability
-3. **Queue**: If no car is available, add group to waiting queue (FIFO)
+1. **Immediate allocation**:
+   - Use the **seat bucket index** to find the best-fitting car with at least `people` available seats.
+   - If such a car exists, reserve its seats and create a `groupId → carId` mapping.
+2. **Queueing**:
+   - If no car is available, the group is added to the **waiting queue** (FIFO) and `peopleCounter` is updated.
 
-### Dropoff and Reassignment
+### Dropoff & Reallocation
 
 When a group is dropped off:
 
-1. **Free Seats**: Release the seats occupied by the group
-2. **Queue Processing**: Select optimal set of waiting groups that can fit in the freed seats
-3. **Assignment**: Assign groups from queue in FIFO order, maximizing seat utilization
+1. **Release seats** from the associated car.
+2. **Evaluate the waiting queue**:
+   - Check `peopleCounter` to see if any groups could fit in the newly freed seats.
+   - Iterate the waiting queue (FIFO), selecting groups that fit in the released capacity.
+3. **Assign groups**:
+   - For each selected group, reserve seats and create/update the `groupId → carId` mapping.
+   - Remove allocated groups from the waiting queue and adjust `peopleCounter`.
 
 ### Fairness Strategy
 
-Groups are served in FIFO order when possible, but a smaller group may be served before a larger one if:
-- No car can accommodate the larger group
-- A car is available that fits the smaller group
-
-This prevents indefinite waiting for large groups while maximizing resource utilization.
+- Groups are **served as fast as possible** while preserving **arrival order when possible**.
+- A later group can be served before an earlier group **only if no car can serve the earlier group**.
+- This avoids starvation of small groups and keeps utilization high, at the cost of potentially long waits for very large groups.
 
 ## Running the Service
 
 ### Prerequisites
 
-- **Docker** (required)
-- Java 17 and Maven 3.6+ (optional, only if you want to run without Docker)
+- **Docker** (required for the `Makefile` workflows).
+- **Java 11 + Maven 3.6+** (optional, if you want to run it directly without Docker).
 
-### Quick Start (Recommended)
+### Quick Start
 
 ```bash
-# See all available commands
+# Show all available commands
 make help
 
-# Start development server with live reload (recommended for active development)
+# Start development server (live reload via Spring DevTools)
 make dev
 
-# Or start with debugging enabled
+# Start development server with debugger on port 5005
 make debug
 
 # Check service health
 make status
 
-# View logs
+# Tail application logs
 make logs
 
 # Stop the server
 make stop
 ```
 
-The service runs on port `9091` by default.
+The service listens on **port 9091** by default.
 
 ### Available Make Commands
 
-#### Development
-- `make dev` - Start with live reload (auto-reloads on code changes)
-- `make debug` - Start with debugging (port 5005)
-- `make logs` - Show server logs
-- `make stop` - Stop server
-- `make status` - Check if server is running
+- **Development & Execution**
+  - `make dev` – Start development server with live reload (bind-mounts source code).
+  - `make debug` – Start development server with debugger exposed on port 5005.
+  - `make compile` – Run `mvn compile` inside the dev container (use after code changes if your IDE is not auto-compiling).
+  - `make restart` – Restart the running dev container.
+  - `make logs` – Show container logs (follow mode).
+  - `make stop` – Stop and remove the dev container.
+  - `make status` – Call `/status` to check if the service is healthy.
+  - `make ssh` – Open a shell inside the running container.
 
-#### Testing
-- `make test` - Run all unit and integration tests
-- `make test-api` - Test API endpoints (requires running server)
+- **Testing**
+  - `make test` – Run tests. If a dev container is running, it reuses it; otherwise, it builds a test image and runs `mvn test`.
+  - `make test-quick` – Run tests **only** in a running dev container (fastest option).
+  - `make test-ci` – Clean build for CI/CD: builds the image from scratch and runs `mvn test`.
 
-#### Production
-- `make build` - Build production Docker image
-- `make run` - Run production container
+- **Production**
+  - `make build` – Build the production Docker image (multi-stage, optimized JAR).
+  - `make run` – Build (no cache) and run the production container on port 9091.
 
-#### Utilities
-- `make status` - Check service health
-- `make info` - Show project information
-- `make clean` - Clean up containers and images
-- `make clean-all` - Deep clean including build artifacts
+- **Cleanup**
+  - `make clean` – Stop/remove containers and delete the dev/test/prod images.
 
-### Configuration
+## Configuration
 
-Application configuration can be found in `src/main/resources/application.properties`:
+Application configuration lives in `src/main/resources/application.properties`:
 
 ```properties
 server.port=9091
@@ -219,33 +238,34 @@ spring.application.name=car-pooling
 logging.level.com.cabify.carpooling=INFO
 ```
 
+You can override `server.port` or logging levels using standard Spring Boot mechanisms (environment variables, command-line args, etc.).
+
 ## Testing
 
-The project includes comprehensive test coverage:
+The project includes unit tests and integration tests focusing on both **business logic** and **API behavior**.
 
-### Unit Tests
+### Test Types
 
-- `MapHelperTest`: Tests for binary search and map sorting utilities
-- `CarServiceTest`: Tests for car finding and availability management
-- `GroupServiceTest`: Tests for group selection and queue management
-
-### Integration Tests
-
-- `CarPoolingApplicationTests`: Basic integration tests
-- `CarPoolingControllerIntegrationTest`: Comprehensive API endpoint tests
+- **Unit tests** (`src/test/java/com/cabify/carpooling/service`):
+  - `CarServiceTest` – Validates car selection, reservation, and seat management logic.
+  - `GroupServiceTest` – Validates waiting queue behavior and group allocation rules.
+- **Integration tests** (`src/test/java/com/cabify/carpooling/controller`):
+  - `CarPoolingControllerIntegrationTest` – Exercises the REST API contract end‑to‑end.
+- **Application smoke test**:
+  - `CarPoolingApplicationTests` – Basic Spring Boot context and smoke tests.
 
 ### Running Tests
 
 ```bash
-# Run all tests (in Docker)
+# Run all tests using Docker (smart behavior, reuses dev container when available)
 make test
 
-# Test API endpoints (requires running server)
-make dev          # Start server first
-make test-api     # Run API tests
+# Fast tests using an already running dev container
+make dev      # if not running yet
+make test-quick
 
-# Or use the test script
-./test-api.sh
+# CI-style clean test run
+make test-ci
 ```
 
 ### Manual Testing with curl
@@ -262,12 +282,12 @@ curl -X PUT http://localhost:9091/cars \
   -H "Content-Type: application/json" \
   -d '[{"id":1,"seats":4},{"id":2,"seats":6}]'
 
-# 4. Request journey
+# 4. Request a journey
 curl -X POST http://localhost:9091/journey \
   -H "Content-Type: application/json" \
   -d '{"id":1,"people":4}'
 
-# 5. Locate group
+# 5. Locate the group
 curl -X POST http://localhost:9091/locate \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "ID=1"
@@ -280,251 +300,82 @@ curl -X POST http://localhost:9091/dropoff \
 
 ## Project Structure
 
-```
+```text
 src/
 ├── main/
 │   ├── java/
 │   │   └── com/cabify/carpooling/
-│   │       ├── controller/          # REST controllers
-│   │       │   └── CarPoolingController.java
-│   │       ├── service/             # Business logic
-│   │       │   ├── CarService.java
-│   │       │   ├── GroupService.java
-│   │       │   └── JourneyService.java
-│   │       ├── repository/          # Data access
+│   │       ├── controller/
+│   │       │   ├── CarPoolingController.java
+│   │       │   └── GlobalExceptionHandler.java
+│   │       ├── dto/
+│   │       │   ├── CarDTO.java
+│   │       │   └── JourneyDTO.java
+│   │       ├── mapper/
+│   │       │   └── CarMapper.java
+│   │       ├── model/
+│   │       │   └── Car.java
+│   │       ├── repository/
 │   │       │   ├── CarRepository.java
 │   │       │   ├── GroupRepository.java
 │   │       │   ├── JourneyRepository.java
-│   │       │   ├── InMemoryCarRepository.java
-│   │       │   ├── InMemoryGroupRepository.java
-│   │       │   └── InMemoryJourneyRepository.java
-│   │       ├── model/               # Domain entities
-│   │       │   ├── Car.java
-│   │       │   ├── Group.java
-│   │       │   └── Journey.java
-│   │       ├── exception/           # Custom exceptions
+│   │       │   └── inmemory/
+│   │       │       ├── InMemoryCarRepository.java
+│   │       │       ├── InMemoryGroupRepository.java
+│   │       │       └── InMemoryJourneyRepository.java
+│   │       ├── service/
+│   │       │   ├── CarService.java
+│   │       │   ├── GroupService.java
+│   │       │   └── JourneyService.java
+│   │       ├── exception/
 │   │       │   ├── ExistingGroupException.java
 │   │       │   ├── GroupNotFoundException.java
-│   │       │   ├── InvalidPayloadException.java
-│   │       │   └── DuplicatedIdException.java
-│   │       ├── util/                # Utilities
-│   │       │   └── MapHelper.java
+│   │       │   └── InvalidPayloadException.java
 │   │       └── CarPoolingApplication.java
 │   └── resources/
 │       └── application.properties
 └── test/
     └── java/
         └── com/cabify/carpooling/
-            ├── service/             # Unit tests
-            ├── controller/          # Integration tests
-            └── util/                # Utility tests
+            ├── CarPoolingApplicationTests.java
+            ├── controller/
+            │   └── CarPoolingControllerIntegrationTest.java
+            └── service/
+                ├── CarServiceTest.java
+                └── GroupServiceTest.java
 ```
 
-## Logging and Observability
-
-The service includes structured logging focused on the **business logic layer**:
-
-### Business Events (Service Layer)
-- Journey requests and assignments
-- Car allocations and updates
-- Dropoff processing
-- Queue operations
-- State resets (car loading)
-
-### Performance Metrics
-- Operation timing (car finding, allocation, queue processing)
-- Request duration for key operations
-- Queue size and allocation statistics
-
-### Log Levels
-- **INFO**: Important business operations (journey assignments, dropoffs, state changes)
-- **DEBUG**: Detailed operation information (car finding, queue processing, allocations)
-- **WARN**: Business rule violations (duplicate groups, already assigned journeys)
-- **ERROR**: Exceptions and failures
-
-## Performance Characteristics
-
-- **Car Finding**: O(log n) using binary search on sorted availability map
-- **Journey Assignment**: O(1) for direct assignment, O(n) for queue processing (optimized with early termination)
-- **State Updates**: O(1) for individual operations
-- **Memory**: Efficient in-memory storage with minimal overhead
-- **Concurrency**: Thread-safe operations support multiple concurrent requests
-
-## Design Decisions
+## Design & Trade-offs
 
 ### Why In-Memory Storage?
 
-- **Performance**: Sub-millisecond response times
-- **Simplicity**: No external dependencies, easier to deploy and test
-- **Scalability**: Sufficient for the required scale (10^4-10^5 entities)
-- **Thread Safety**: Proper synchronization ensures data consistency
+- **Performance**: Sub‑millisecond operations for typical workloads.
+- **Simplicity**: No external stateful services required; easy to run and test anywhere Docker is available.
+- **Determinism**: The service can be reset deterministically using `PUT /cars`.
+- **Challenge constraints**: Keeps the solution fully self-contained, as requested in the original brief.
 
-### Why Binary Search for Car Finding?
+### Why Bucket-Based Car Allocation Instead of Binary Search?
 
-- **Efficiency**: O(log n) vs O(n) linear search
-- **Optimal Allocation**: Sorted by available seats ensures best-fit allocation
-- **Scalability**: Performance doesn't degrade significantly with large car counts
+- **Constant-time lookup**: For a small, fixed domain of seat counts (1–6), bucket indexing provides O(1) lookup instead of O(log n).
+- **Fairness**: Combined with `LinkedHashSet`, it preserves insertion order within a bucket.
+- **Simplicity**: Logic is easy to reason about and well-suited for the constraints of the problem.
 
-### Why Separate Repository Layer?
+### Separation of Concerns
 
-- **Separation of Concerns**: Clear distinction between business logic and data access
-- **Testability**: Easy to mock repositories for unit testing
-- **Maintainability**: Changes to storage implementation don't affect business logic
-- **Flexibility**: Easy to swap storage implementation (e.g., to database) if needed
+- Controllers stay thin and focused on HTTP concerns.
+- Services encapsulate business rules and orchestration.
+- Repositories encapsulate data access and concurrency details.
+- DTOs prevent leaking internal models through the public API.
 
-## Migration from PHP Implementation
+## Production Readiness Notes
 
-This Java implementation is based on a PHP Laravel + Octane solution. Key similarities:
+This project is a coding challenge; however, for a real production deployment you would typically add:
 
-- **Architecture**: Same layered architecture (Controllers, Services, Repositories)
-- **Algorithms**: Identical binary search and queue processing algorithms
-- **Business Logic**: Same fairness rules and assignment strategy
-- **API Contract**: Fully compatible REST API
+- **Monitoring & Metrics**: Expose application and business metrics (e.g. via Micrometer/Prometheus) and integrate with APM tools.
+- **High availability**: Replicate state or move to an external data store if multiple instances are required.
+- **Security**: Authentication/authorization, rate limiting and input hardening.
+- **Configuration management**: Use environment-based configuration for ports, logging, etc.
 
-Key differences:
+## License / Context
 
-- **Storage**: ConcurrentHashMap instead of Swoole Tables
-- **Concurrency**: Java synchronization instead of Swoole workers
-- **Framework**: Spring Boot instead of Laravel Octane
-
-## Development Workflow
-
-### Typical Development Session (with Live Reload)
-
-```bash
-# 1. Start the server with live reload
-make dev
-
-# 2. In another terminal, watch logs
-make logs
-
-# 3. Make code changes in your IDE...
-#    - Edit Java files
-#    - Save → Spring Boot DevTools auto-reloads (5-10 seconds)
-#    - No need to restart!
-
-# 4. Test your changes
-curl http://localhost:9091/status
-
-# 5. Run unit tests
-make test
-
-# 6. When finished
-make stop
-```
-
-### Debugging
-
-#### Remote Debugging (Recommended)
-
-```bash
-# 1. Start server with debugging enabled
-make dev-debug
-
-# 2. In your IDE (VS Code, IntelliJ, Eclipse):
-#    - Connect to localhost:5005
-#    - Set breakpoints
-#    - Make requests → Debugger stops at breakpoints
-
-# VS Code: Press F5 (already configured in .vscode/launch.json)
-# IntelliJ: Run > Edit Configurations > Remote JVM Debug (localhost:5005)
-```
-
-#### Container Debugging
-
-```bash
-# Enter the container
-make ssh
-
-# Inside the container you can:
-# - Check Java version: java -version
-# - View application files: ls -la /app
-# - Check processes: ps aux
-# - Exit: exit
-```
-
-### Development Modes
-
-- **`make dev`**: Development mode with live reload - auto-reloads on code changes
-- **`make debug`**: Development mode with debugging - connect IDE to port 5005
-
-### Docker Compose (Optional)
-
-The project includes a `docker-compose.yml` for CI/CD integration with Cabify's test harness. For local development, you don't need it - just use `make dev`.
-
-The harness service is commented out because the image (`cabify/challenge:latest`) is only available in Cabify's internal registry. It will be used automatically in GitLab CI.
-
-## Production Readiness Recommendations
-
-1. **Monitoring & Alerting**
-   - Integrate with APM tools (New Relic, Datadog, etc.)
-   - Set up alerts for error rates, response times, queue sizes
-   - Monitor memory usage and thread pool health
-
-2. **Metrics Collection**
-   - Expose Prometheus metrics endpoint
-   - Track: request rate, latency, queue size, car utilization
-   - Monitor JVM metrics (heap, GC, threads)
-
-3. **High Availability**
-   - Run multiple instances behind load balancer
-   - Consider distributed cache (Redis) for shared state if multi-instance is needed
-   - Implement graceful shutdown handling
-
-4. **Security**
-   - Add authentication/authorization if needed
-   - Implement rate limiting
-   - Input validation and sanitization
-
-5. **Performance Tuning**
-   - Tune thread pool sizes based on load
-   - Monitor and adjust JVM memory settings
-   - Profile and optimize hot paths
-
-## Troubleshooting
-
-### Port Already in Use
-
-```bash
-# Find what's using port 9091
-lsof -i :9091
-
-# Kill the process or change PORT in Makefile
-```
-
-### Container Won't Start
-
-```bash
-# Check logs for errors
-make logs
-
-# Rebuild from scratch
-make clean-all
-make dev
-```
-
-### Changes Not Reflected
-
-```bash
-# Full restart
-make restart
-```
-
-## Quick Reference
-
-| Command | Description |
-|---------|-------------|
-| `make help` | Show all available commands |
-| `make dev` | Start development server |
-| `make debug` | Start development debug server |
-| `make logs` | View server logs |
-| `make status` | Check if service is running |
-| `make test-api` | Test all endpoints |
-| `make test` | Run unit tests |
-| `make ssh` | Enter container |
-| `make stop` | Stop server |
-| `make clean` | Clean up |
-
-## License
-
-This project is part of a coding challenge for Cabify.
+This repository is part of a **Cabify coding challenge**. It is intended as an example of high-quality code, architecture and documentation under the constraints of the exercise.
