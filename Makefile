@@ -6,7 +6,7 @@ IMAGE := car-pooling
 CONTAINER := car-pooling-dev
 PORT := 9091
 
-.PHONY: help run dev-live dev-debug logs stop test build status clean compile ssh restart
+.PHONY: help run dev debug logs stop test build status clean compile ssh restart
 
 # Help
 help:	### Show available commands
@@ -19,8 +19,8 @@ compile:	### Compile Java files (use after editing code)
 	@docker exec $(CONTAINER) mvn compile -q
 	@echo "✅ Compiled - DevTools will auto-restart in 2-3 seconds"
 
-dev-live:	### Start development server with live reload
-	@echo "🔥 Starting development server with live reload..."
+dev:	### Start development server with live reload (run 'make compile' after code changes)
+	@echo "🔥 Starting development server..."
 	@docker stop $(CONTAINER) 2>/dev/null || true
 	@docker rm $(CONTAINER) 2>/dev/null || true
 	@docker build -t $(IMAGE):dev --target dev .
@@ -28,12 +28,13 @@ dev-live:	### Start development server with live reload
 		-p $(PORT):9091 \
 		-v $$(pwd)/src:/app/src \
 		-v $$(pwd)/pom.xml:/app/pom.xml \
+		-v $$(pwd)/target:/app/target \
 		-v maven-cache:/root/.m2 \
 		$(IMAGE):dev
-	@echo "✅ Server with live reload running at http://localhost:$(PORT)"
-	@echo "💡 Edit code and run 'make compile' to trigger auto-reload"
+	@echo "✅ Server running at http://localhost:$(PORT)"
+	@echo "💡 Enable auto-compile in your IDE for automatic reload"
 
-dev-debug:	### Start development server with debugger (port 5005)
+debug:	### Start development server with debugger (port 5005)
 	@echo "🐛 Starting development server with debugger..."
 	@docker stop $(CONTAINER) 2>/dev/null || true
 	@docker rm $(CONTAINER) 2>/dev/null || true
@@ -43,13 +44,14 @@ dev-debug:	### Start development server with debugger (port 5005)
 		-p 5005:5005 \
 		-v $$(pwd)/src:/app/src \
 		-v $$(pwd)/pom.xml:/app/pom.xml \
+		-v $$(pwd)/target:/app/target \
 		-v maven-cache:/root/.m2 \
 		$(IMAGE):dev \
 		mvn spring-boot:run -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
-	@echo "✅ Server with debugging running at http://localhost:$(PORT)"
+	@echo "✅ Server running at http://localhost:$(PORT)"
 	@echo "✅ Debugger listening on localhost:5005"
 	@echo "💡 Connect your IDE to localhost:5005"
-	@echo "💡 Edit code and run 'make compile' to trigger auto-reload"
+	@echo "💡 Enable auto-compile in your IDE for automatic reload"
 
 # Utilities
 logs:	### Show server logs

@@ -49,10 +49,11 @@ public class GroupService {
      */
     public LinkedHashMap<Integer, Integer> selectGroupsToAllocate(int seats) {
         long startTime = System.currentTimeMillis();
+
         LinkedHashMap<Integer, Integer> result = new LinkedHashMap<>();
         LinkedHashMap<Integer, Integer> groups = groupRepository.getQueue();
-        int queueSize = groups.size();
 
+        int queueSize = groups.size();
         int pendingSeats = seats;
 
         for (Map.Entry<Integer, Integer> entry : groups.entrySet()) {
@@ -77,6 +78,7 @@ public class GroupService {
 
         if (!result.isEmpty()) {
             int totalPeopleAllocated = result.values().stream().mapToInt(Integer::intValue).sum();
+
             log.debug(
                     "Groups selected for allocation. available_seats={}, selected_groups_count={}, queue_size={}, total_people_allocated={}, remaining_seats={}, duration_ms={}",
                     seats, result.size(), queueSize, totalPeopleAllocated, pendingSeats, duration);

@@ -43,6 +43,31 @@ public class JourneyService {
     }
 
     /**
+     * Process a dropoff for a group.
+     */
+    public void dropoff(int groupId, int people) {
+        long startTime = System.currentTimeMillis();
+
+        // Check if group has traveled
+        Integer carId = getCar(groupId);
+
+        if (carId != null) {
+            remove(groupId);
+            updateCarAllocation(carId, people);
+
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Dropoff processed for traveling group. group_id={}, people={}, car_id={}, duration_ms={}",
+                    groupId, people, carId, duration);
+        } else {
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Dropoff processed for waiting group. group_id={}, people={}, duration_ms={}",
+                    groupId, people, duration);
+        }
+
+        groupService.remove(groupId);
+    }
+
+    /**
      * Request a journey for a group, allocating a car or queueing it.
      */
     public void request(int groupId, int people) {
@@ -53,58 +78,75 @@ public class JourneyService {
             return;
         }
 
-        Integer carId = carService.findCar(people);
+        Integer carId = carService.findAndReserveCar(people);
 
         if (carId != null) {
             journeyRepository.save(groupId, carId);
             groupService.removeFromWaitingList(groupId);
-            carService.updateAvailableSeats(carId, people * -1);
 
             long duration = System.currentTimeMillis() - startTime;
             log.info("Journey assigned successfully. group_id={}, people={}, car_id={}, duration_ms={}",
                     groupId, people, carId, duration);
+
             return;
         }
 
         groupService.addToWaitingList(groupId, people);
 
         long duration = System.currentTimeMillis() - startTime;
+
         log.info("Journey queued - no available car. group_id={}, people={}, duration_ms={}",
                 groupId, people, duration);
     }
 
     /**
-     * Reassign free seats of a car to waiting groups.
+     * Reassign free seats of a car to waiting groups after a dropoff.
      */
     public void updateCarAllocation(int carId, int newFreeSeats) {
         long startTime = System.currentTimeMillis();
-        int totalFreeSeats = newFreeSeats + carService.getAvailableSeats(carId);
-        int newAssignedSeats = 0;
 
+        // Atomic operation: release seats and get the new total available seats
+        int totalFreeSeats = carService.releaseSeats(carId, newFreeSeats);
+
+        // Select groups that can fit in the available seats
         LinkedHashMap<Integer, Integer> groups = groupService.selectGroupsToAllocate(totalFreeSeats);
         StringBuilder assignedGroups = new StringBuilder();
+        int successfullyAssigned = 0;
 
+        // Try to assign each group atomically
         for (Map.Entry<Integer, Integer> entry : groups.entrySet()) {
             int groupId = entry.getKey();
             int people = entry.getValue();
 
-            journeyRepository.save(groupId, carId);
-            groupService.removeFromWaitingList(groupId);
+            // Atomic operation: try to reserve seats for this group
+            boolean reserved = carService.tryReserveSeats(carId, people);
 
-            newAssignedSeats += people;
-            if (assignedGroups.length() > 0) {
-                assignedGroups.append(", ");
+            if (reserved) {
+                journeyRepository.save(groupId, carId);
+                groupService.removeFromWaitingList(groupId);
+
+                successfullyAssigned += people;
+                if (assignedGroups.length() > 0) {
+                    assignedGroups.append(", ");
+                }
+                assignedGroups.append(String.format("group_id=%d,people=%d", groupId, people));
+            } else {
+                log.warn("Could not reserve seats for group during reallocation (race condition). " +
+                        "car_id={}, group_id={}, people={}", carId, groupId, people);
+
+                break;
             }
-            assignedGroups.append(String.format("group_id=%d,people=%d", groupId, people));
         }
 
-        carService.updateAvailableSeats(carId, newFreeSeats - newAssignedSeats);
-
         long duration = System.currentTimeMillis() - startTime;
+        int remainingSeats = carService.getAvailableSeats(carId);
 
         log.info(
-                "Car allocation updated after dropoff. car_id={}, new_free_seats={}, total_free_seats={}, groups_count={}, total_people_assigned={}, remaining_seats={}, assigned_groups=[{}], duration_ms={}",
-                carId, newFreeSeats, totalFreeSeats, groups.size(), newAssignedSeats,
-                totalFreeSeats - newAssignedSeats, assignedGroups.toString(), duration);
+                "Car allocation updated after dropoff. car_id={}, new_free_seats={}, total_free_seats={}, " +
+                        "groups_attempted={}, groups_assigned={}, total_people_assigned={}, remaining_seats={}, " +
+                        "assigned_groups=[{}], duration_ms={}",
+                carId, newFreeSeats, totalFreeSeats, groups.size(),
+                (assignedGroups.length() > 0 ? groups.size() : 0),
+                successfullyAssigned, remainingSeats, assignedGroups.toString(), duration);
     }
 }

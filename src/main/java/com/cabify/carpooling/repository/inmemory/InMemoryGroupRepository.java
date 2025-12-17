@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * In-memory implementation of GroupRepository.
+ *
  * Thread-safe using ConcurrentHashMap.
  */
 @Repository

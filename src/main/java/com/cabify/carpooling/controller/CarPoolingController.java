@@ -32,6 +32,9 @@ public class CarPoolingController {
     private final GroupService groupService;
     private final JourneyService journeyService;
 
+    // Global lock to ensure atomicity across multi-step operations
+    private final Object lock = new Object();
+
     public CarPoolingController(CarService carService, GroupService groupService,
             JourneyService journeyService) {
         this.carService = carService;
@@ -62,9 +65,7 @@ public class CarPoolingController {
 
         validateCars(carDTOs);
 
-        // Convert DTOs to domain entities
         List<Car> cars = CarMapper.toEntities(carDTOs);
-
         carService.load(cars);
 
         return ResponseEntity.ok().build();
@@ -80,14 +81,16 @@ public class CarPoolingController {
         int groupId = journeyDTO.getId();
         int people = journeyDTO.getPeople();
 
-        // Check if group already exists
-        if (groupService.getPeople(groupId) != null) {
-            throw new ExistingGroupException();
-        }
+        synchronized (lock) {
+            // Check if group already exists
+            if (groupService.getPeople(groupId) != null) {
+                throw new ExistingGroupException();
+            }
 
-        // Register group and request journey
-        groupService.add(groupId, people);
-        journeyService.request(groupId, people);
+            // Register group and request journey
+            groupService.add(groupId, people);
+            journeyService.request(groupId, people);
+        }
 
         return ResponseEntity.ok().build();
     }
@@ -102,21 +105,16 @@ public class CarPoolingController {
             return ResponseEntity.badRequest().build();
         }
 
-        // Check if group exists
-        Integer people = groupService.getPeople(groupId);
-        if (people == null) {
-            throw new GroupNotFoundException();
-        }
+        synchronized (lock) {
+            // Check if group exists
+            Integer people = groupService.getPeople(groupId);
+            if (people == null) {
+                throw new GroupNotFoundException();
+            }
 
-        // Check if group has traveled
-        Integer carId = journeyService.getCar(groupId);
-        if (carId != null) {
-            journeyService.remove(groupId);
-            journeyService.updateCarAllocation(carId, people);
+            // Execute dropoff
+            journeyService.dropoff(groupId, people);
         }
-
-        // Remove group
-        groupService.remove(groupId);
 
         return ResponseEntity.ok().build();
     }
@@ -131,22 +129,24 @@ public class CarPoolingController {
             return ResponseEntity.badRequest().build();
         }
 
-        // Check if group exists
-        if (groupService.getPeople(groupId) == null) {
-            throw new GroupNotFoundException();
+        synchronized (lock) {
+            // Check if group exists
+            if (groupService.getPeople(groupId) == null) {
+                throw new GroupNotFoundException();
+            }
+
+            // Check if group is still waiting
+            Integer carId = journeyService.getCar(groupId);
+            if (carId == null) {
+                return ResponseEntity.noContent().build();
+            }
+
+            // Get the car the group is traveling in and convert to DTO
+            Car car = carService.get(carId);
+            CarDTO carDTO = CarMapper.toDTO(car);
+
+            return ResponseEntity.ok(carDTO);
         }
-
-        // Check if group is still waiting
-        Integer carId = journeyService.getCar(groupId);
-        if (carId == null) {
-            return ResponseEntity.noContent().build();
-        }
-
-        // Get the car the group is traveling in and convert to DTO
-        Car car = carService.get(carId);
-        CarDTO carDTO = CarMapper.toDTO(car);
-
-        return ResponseEntity.ok(carDTO);
     }
 
     /**
@@ -166,7 +166,7 @@ public class CarPoolingController {
                                 index, carDTO.getId()));
             }
 
-            if (carDTO.getSeats() < 4 || carDTO.getSeats() > 6) {
+            if (carDTO.getSeats() < 1 || carDTO.getSeats() > 6) {
                 throw new InvalidPayloadException(String.format(
                         "Car at index %d (id=%d) has invalid seats: %d (must be between 4 and 6)",
                         index, carDTO.getId(), carDTO.getSeats()));

@@ -40,61 +40,73 @@ class CarServiceTest {
     }
 
     @Test
-    void testFindCar_ExactMatch() {
+    void testFindAndReserveCar_ExactMatch() {
         List<Car> cars = Arrays.asList(
                 new Car(1, 4),
                 new Car(2, 5),
                 new Car(3, 6));
         carService.load(cars);
 
-        Integer carId = carService.findCar(4);
+        Integer carId = carService.findAndReserveCar(4);
         assertNotNull(carId);
         assertEquals(1, carId);
+
+        // Verify that seats were reserved
+        assertEquals(0, carService.getAvailableSeats(1));
     }
 
     @Test
-    void testFindCar_BestFit() {
+    void testFindAndReserveCar_BestFit() {
         List<Car> cars = Arrays.asList(
                 new Car(1, 4),
                 new Car(2, 5),
                 new Car(3, 6));
         carService.load(cars);
 
-        Integer carId = carService.findCar(3);
+        Integer carId = carService.findAndReserveCar(3);
         assertNotNull(carId);
-        assertEquals(1, carId); // Should return car with 4 seats
+        assertEquals(1, carId); // Should return car with 4 seats (best fit)
+
+        // Verify that seats were reserved (4 - 3 = 1 remaining)
+        assertEquals(1, carService.getAvailableSeats(1));
     }
 
     @Test
-    void testFindCar_NoAvailableCar() {
+    void testFindAndReserveCar_NoAvailableCar() {
         List<Car> cars = Arrays.asList(
                 new Car(1, 4),
                 new Car(2, 5));
         carService.load(cars);
 
-        Integer carId = carService.findCar(6);
+        Integer carId = carService.findAndReserveCar(6);
         assertNull(carId);
     }
 
     @Test
-    void testFindCar_EmptyList() {
+    void testFindAndReserveCar_EmptyList() {
         carService.load(Arrays.asList());
 
-        Integer carId = carService.findCar(1);
+        Integer carId = carService.findAndReserveCar(1);
         assertNull(carId);
     }
 
     @Test
-    void testUpdateAvailableSeats() {
+    void testReleaseSeats() {
         List<Car> cars = Arrays.asList(
                 new Car(1, 6),
                 new Car(2, 4));
         carService.load(cars);
 
-        carService.updateAvailableSeats(1, -4);
+        // Reserve 4 seats - best-fit algorithm will use car 2 (exactly 4 seats)
+        Integer carId = carService.findAndReserveCar(4);
+        assertEquals(2, carId); // Car 2 should be selected (best-fit)
+        assertEquals(6, carService.getAvailableSeats(1)); // Car 1 untouched
+        assertEquals(0, carService.getAvailableSeats(2)); // Car 2 fully reserved
 
-        assertEquals(2, carService.getAvailableSeats(1));
-        assertEquals(4, carService.getAvailableSeats(2));
+        // Release 4 seats back to car 2
+        carService.releaseSeats(2, 4);
+        assertEquals(6, carService.getAvailableSeats(1)); // Car 1 still untouched
+        assertEquals(4, carService.getAvailableSeats(2)); // Car 2 fully available
     }
 
     @Test

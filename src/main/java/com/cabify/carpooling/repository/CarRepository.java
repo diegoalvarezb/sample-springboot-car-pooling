@@ -1,7 +1,6 @@
 package com.cabify.carpooling.repository;
 
 import com.cabify.carpooling.model.Car;
-import java.util.LinkedHashMap;
 import java.util.List;
 
 /**
@@ -11,16 +10,11 @@ public interface CarRepository {
 
     /**
      * Get a car by its ID.
-     *
-     * @param carId The car ID
-     * @return The car, or null if not found
      */
     Car get(int carId);
 
     /**
      * Replace the entire list of cars.
-     *
-     * @param cars The new list of cars
      */
     void replace(List<Car> cars);
 
@@ -30,16 +24,22 @@ public interface CarRepository {
     void flush();
 
     /**
-     * Get the availability map (carId -> availableSeats) sorted in descending order by available seats.
-     *
-     * @return A LinkedHashMap sorted by available seats in descending order
+     * Find the best car that can fit the requested seats and reserve it atomically.
      */
-    LinkedHashMap<Integer, Integer> getAvailabilityMap();
+    Integer findAndReserveCar(int seats);
 
     /**
-     * Update the availability map.
-     *
-     * @param availabilityMap The new availability map
+     * Get the number of available seats for a specific car.
      */
-    void updateAvailabilityMap(LinkedHashMap<Integer, Integer> availabilityMap);
+    int getAvailableSeats(int carId);
+
+    /**
+     * Release seats and get the new total available seats atomically.
+     */
+    int releaseSeats(int carId, int seats);
+
+    /**
+     * Try to reserve seats from a specific car atomically.
+     */
+    boolean tryReserveSeats(int carId, int seats);
 }

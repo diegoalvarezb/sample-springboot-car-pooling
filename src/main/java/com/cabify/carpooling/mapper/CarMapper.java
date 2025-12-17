@@ -17,9 +17,6 @@ public final class CarMapper {
 
     /**
      * Convert domain entity Car to DTO for API response.
-     *
-     * @param car The car entity to convert
-     * @return CarDTO or null if car is null
      */
     public static CarDTO toDTO(Car car) {
         if (car == null) {
@@ -30,9 +27,6 @@ public final class CarMapper {
 
     /**
      * Convert DTO to domain entity Car.
-     *
-     * @param carDTO The DTO to convert
-     * @return Car entity or null if carDTO is null
      */
     public static Car toEntity(CarDTO carDTO) {
         if (carDTO == null) {
@@ -43,9 +37,6 @@ public final class CarMapper {
 
     /**
      * Convert list of DTOs to list of domain entities.
-     *
-     * @param carDTOs The list of DTOs to convert
-     * @return List of Car entities
      */
     public static List<Car> toEntities(List<CarDTO> carDTOs) {
         if (carDTOs == null) {
@@ -58,9 +49,6 @@ public final class CarMapper {
 
     /**
      * Convert list of domain entities to list of DTOs.
-     *
-     * @param cars The list of entities to convert
-     * @return List of CarDTOs
      */
     public static List<CarDTO> toDTOs(List<Car> cars) {
         if (cars == null) {

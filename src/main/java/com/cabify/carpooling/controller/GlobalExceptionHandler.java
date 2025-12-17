@@ -13,7 +13,7 @@ import com.cabify.carpooling.exception.GroupNotFoundException;
 import com.cabify.carpooling.exception.InvalidPayloadException;
 
 /**
- * Global exception handler to catch and log errors before they become 400 responses.
+ * Global exception handler to catch and log errors.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -22,10 +22,6 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles invalid payload exceptions.
-     *
-     * @param e The exception containing details about the invalid payload
-     *
-     * @return HTTP 400 Bad Request response
      */
     @ExceptionHandler(InvalidPayloadException.class)
     public ResponseEntity<Void> handleInvalidPayload(InvalidPayloadException e) {
@@ -36,10 +32,6 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles existing group exceptions.
-     *
-     * @param e The exception containing details about the existing group
-     *
-     * @return HTTP 400 Bad Request response
      */
     @ExceptionHandler(ExistingGroupException.class)
     public ResponseEntity<Void> handleExistingGroup(ExistingGroupException e) {
@@ -50,10 +42,6 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles group not found exceptions.
-     *
-     * @param e The exception containing details about the group not found
-     *
-     * @return HTTP 404 Not Found response
      */
     @ExceptionHandler(GroupNotFoundException.class)
     public ResponseEntity<Void> handleGroupNotFound(GroupNotFoundException e) {
@@ -64,10 +52,6 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles HTTP message not readable exceptions.
-     *
-     * @param e The exception containing details about the HTTP message not readable
-     *
-     * @return HTTP 400 Bad Request response
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Void> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
@@ -84,10 +68,6 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles max upload size exceeded exceptions.
-     *
-     * @param e The exception containing details about the max upload size exceeded
-     *
-     * @return HTTP 400 Bad Request response
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Void> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
@@ -99,10 +79,6 @@ public class GlobalExceptionHandler {
 
     /**
      * Handles generic exceptions.
-     *
-     * @param e The exception containing details about the generic exception
-     *
-     * @return HTTP 500 Internal Server Error response
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Void> handleGenericException(Exception e) {

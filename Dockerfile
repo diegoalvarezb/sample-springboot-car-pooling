@@ -15,11 +15,6 @@ COPY src ./src
 # Expose ports: app and debug
 EXPOSE 9091 5005
 
-# Optional healthcheck for dev (enable if desired)
-# Note: Maven image usually includes curl; if not, remove healthcheck or install curl.
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:9091/status || exit 1
-
 # Default: dev mode (you can override CMD with docker run if needed)
 CMD ["mvn", "spring-boot:run"]
 
@@ -53,15 +48,5 @@ WORKDIR /app
 COPY --from=build /app/target/car-pooling-1.0.0-SNAPSHOT.jar /app/car-pooling.jar
 
 EXPOSE 9091
-
-# Health check in prod
-# (Install curl if needed; temurin jre sometimes does not include it)
-# If you don't want to install anything, consider using a TCP healthcheck or remove this.
-RUN apt-get update && \
-    apt-get install -y curl && \
-    rm -rf /var/lib/apt/lists/*
-
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:9091/status || exit 1
 
 CMD ["java", "-jar", "/app/car-pooling.jar"]

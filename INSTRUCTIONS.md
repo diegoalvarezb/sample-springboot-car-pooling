@@ -14,9 +14,9 @@ Now it is your turn to take the baton, assuming the ownership of this prototype.
 
 The Car Pooling service is aimed to track the availability of our pool of cars.
 
-Cars have a different amount of seats available, they can accommodate groups of up to 4, 5 or 6 people.
+Cars have a different amount of seats available, they can accommodate groups of up to 6 people.
 
-Users request cars in groups of 1 to 6. People in the same group want to ride on the same car. You can take any group at any car that has enough empty seats for them. If it's not possible to accommodate them, they're willing to wait until there's a car available for them. Once a car is available for a group that is waiting, they should ride. 
+Users request cars in groups of 1 to 6. People in the same group want to ride on the same car. You can take any group at any car that has enough empty seats for them. If it's not possible to accommodate them, they're willing to wait until there's a car available for them. Once a car is available for a group that is waiting, they should ride.
 
 Once they get a car assigned, they will journey until the drop off, you cannot ask them to take another car (i.e. you cannot swap them to another car to make space for another group).
 
@@ -30,7 +30,7 @@ For example: a group of 6 is waiting for a car and there are 4 empty seats at a 
 
 Your goal is to apply the necessary changes to this repository to redirect the situation of the project according to your own quality standards in software development. We expect you to submit a code that will serve as example for other engineers of how we should make software here in Cabify.
 
-Anything you think that should had been done in a different way can be changed. If you are not satisfied with the performance, the design, the code style, the documentation, the build chain, the testing strategy, the Git policy, or any other thing, you can work on improving any of them. 
+Anything you think that should had been done in a different way can be changed. If you are not satisfied with the performance, the design, the code style, the documentation, the build chain, the testing strategy, the Git policy, or any other thing, you can work on improving any of them.
 
 Please note our expectations are put on improving the quality of the product. We do not expect you to extend its functionality by including additional features. This is not the goal of the challenge, and any modification towards improving the product will not be taken in consideration.
 
@@ -42,15 +42,15 @@ This `INSTRUCTIONS.md` file is the only one that is not part of the deliverable.
 
 ### Checks
 
-As you will find in later, the codebase is configured to use GitLab for Continous Integration. You will find a CI job called `acceptance` in its config. It executes the tests that QA has delivered so far for the acceptance of this service. As said above, initially the tests do not pass. You must ensure the CI job is not removed and its tests are green before shipping your changes. 
+As you will find in later, the codebase is configured to use GitLab for Continous Integration. You will find a CI job called `acceptance` in its config. It executes the tests that QA has delivered so far for the acceptance of this service. As said above, initially the tests do not pass. You must ensure the CI job is not removed and its tests are green before shipping your changes.
 
-Once you have completed all the changes to the repository and you submit your solution, a team of experienced developers will check the results. They will likely run some further tests to prove the solution works as expected. 
+Once you have completed all the changes to the repository and you submit your solution, a team of experienced developers will check the results. They will likely run some further tests to prove the solution works as expected.
 
 ## Tips and tricks
 
 - Think twice before throwing the code into the trash and rewrite it from scratch. Your seniors expect to see you improve the codebase. Not to waste your time reinventing the wheel. If you decide on a full rewrite, you had better document the reasons and trade-offs.
- 
-- Use your time wisely. Do not make any change that is not moving the ball one step closer to your archetype of well-done software. 
+
+- Use your time wisely. Do not make any change that is not moving the ball one step closer to your archetype of well-done software.
 
 - Assume it is for real. This code will be eventually used in Production, and different stakeholders will have to deal with it. Think that high-quality software is the one that makes our lives easier. Everybody lives.
 

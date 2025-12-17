@@ -169,13 +169,10 @@ This prevents indefinite waiting for large groups while maximizing resource util
 make help
 
 # Start development server with live reload (recommended for active development)
-make dev-live
+make dev
 
 # Or start with debugging enabled
-make dev-debug
-
-# Or start production-like server (no live reload)
-make dev
+make debug
 
 # Check service health
 make status
@@ -192,9 +189,8 @@ The service runs on port `9091` by default.
 ### Available Make Commands
 
 #### Development
-- `make dev` - Start server (production mode)
-- `make dev-live` - Start with live reload (auto-reloads on code changes)
-- `make dev-debug` - Start with debugging (port 5005)
+- `make dev` - Start with live reload (auto-reloads on code changes)
+- `make debug` - Start with debugging (port 5005)
 - `make logs` - Show server logs
 - `make stop` - Stop server
 - `make status` - Check if server is running
@@ -397,7 +393,7 @@ Key differences:
 
 ```bash
 # 1. Start the server with live reload
-make dev-live
+make dev
 
 # 2. In another terminal, watch logs
 make logs
@@ -449,9 +445,8 @@ make ssh
 
 ### Development Modes
 
-- **`make dev`**: Production-like mode (JAR, no live reload) - fastest startup
-- **`make dev-live`**: Development mode with live reload - auto-reloads on code changes
-- **`make dev-debug`**: Development mode with debugging - connect IDE to port 5005
+- **`make dev`**: Development mode with live reload - auto-reloads on code changes
+- **`make debug`**: Development mode with debugging - connect IDE to port 5005
 
 ### Docker Compose (Optional)
 
@@ -521,6 +516,7 @@ make restart
 |---------|-------------|
 | `make help` | Show all available commands |
 | `make dev` | Start development server |
+| `make debug` | Start development debug server |
 | `make logs` | View server logs |
 | `make status` | Check if service is running |
 | `make test-api` | Test all endpoints |

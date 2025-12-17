@@ -4,16 +4,15 @@ import com.cabify.carpooling.model.Car;
 import com.cabify.carpooling.repository.CarRepository;
 import com.cabify.carpooling.repository.GroupRepository;
 import com.cabify.carpooling.repository.JourneyRepository;
-import com.cabify.carpooling.util.MapHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 
 /**
  * Service for managing cars and their availability.
+ * Delegates all persistence and search logic to the Repository layer.
  */
 @Service
 public class CarService {
@@ -59,61 +58,59 @@ public class CarService {
     }
 
     /**
-     * Locate the best fitting car for the requested seats using binary search.
+     * Find and reserve the best fitting car for the requested seats.
+     * This operation is atomic and thread-safe, delegated to the Repository.
      */
-    public Integer findCar(int seats) {
+    public Integer findAndReserveCar(int seats) {
         long startTime = System.currentTimeMillis();
-        LinkedHashMap<Integer, Integer> availability = carRepository.getAvailabilityMap();
-        int availableCarsCount = availability.size();
 
-        if (availability.isEmpty()) {
-            long duration = System.currentTimeMillis() - startTime;
-            log.debug("No car found - availability map is empty. requested_seats={}, duration_ms={}", seats, duration);
-            return null;
-        }
+        Integer carId = carRepository.findAndReserveCar(seats);
 
-        // Get the first value (highest available seats)
-        Integer maxAvailableSeats = availability.values().iterator().next();
-
-        if (maxAvailableSeats < seats) {
-            long duration = System.currentTimeMillis() - startTime;
-            log.debug(
-                    "No car found for requested seats. requested_seats={}, max_available_seats={}, available_cars_count={}, duration_ms={}",
-                    seats, maxAvailableSeats, availableCarsCount, duration);
-            return null;
-        }
-
-        Integer carId = MapHelper.binarySearchOrNext(availability, seats);
         long duration = System.currentTimeMillis() - startTime;
 
-        log.debug(
-                "Car found for journey. requested_seats={}, car_id={}, available_seats={}, available_cars_count={}, duration_ms={}",
-                seats, carId, availability.get(carId), availableCarsCount, duration);
+        if (carId != null) {
+            log.debug("Car found and reserved in O(1). requested_seats={}, car_id={}, duration_ms={}",
+                    seats, carId, duration);
+        } else {
+            log.debug("No car found for requested seats. requested_seats={}, duration_ms={}",
+                    seats, duration);
+        }
 
         return carId;
     }
 
     /**
-     * Get the number of free seats for a car.
+     * Get the number of available seats for a car.
      */
     public int getAvailableSeats(int carId) {
-        LinkedHashMap<Integer, Integer> availability = carRepository.getAvailabilityMap();
-        return availability.getOrDefault(carId, 0);
+        return carRepository.getAvailableSeats(carId);
     }
 
     /**
-     * Update the free seats counter for a car and keep the map ordered.
+     * Release seats and get the new total available seats atomically.
      */
-    public void updateAvailableSeats(int carId, int increment) {
-        LinkedHashMap<Integer, Integer> availability = carRepository.getAvailabilityMap();
+    public int releaseSeats(int carId, int seats) {
+        int totalAvailable = carRepository.releaseSeats(carId, seats);
 
-        if (!availability.containsKey(carId)) {
-            return;
+        log.debug("Seats released atomically. car_id={}, seats_released={}, total_available={}",
+                carId, seats, totalAvailable);
+
+        return totalAvailable;
+    }
+
+    /**
+     * Try to reserve seats from a specific car atomically.
+     */
+    public boolean tryReserveSeats(int carId, int seats) {
+        boolean success = carRepository.tryReserveSeats(carId, seats);
+
+        if (success) {
+            log.debug("Seats reserved successfully. car_id={}, seats_reserved={}", carId, seats);
+        } else {
+            log.debug("Failed to reserve seats (not enough available). car_id={}, seats_requested={}",
+                    carId, seats);
         }
 
-        availability.put(carId, availability.get(carId) + increment);
-        availability = MapHelper.reorderMapElement(availability, carId);
-
-        carRepository.updateAvailabilityMap(availability);
+        return success;
     }
 }
