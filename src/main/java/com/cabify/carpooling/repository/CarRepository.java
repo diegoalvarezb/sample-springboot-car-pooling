@@ -16,7 +16,7 @@ public interface CarRepository {
     /**
      * Replace the entire list of cars.
      */
-    void replace(List<Car> cars);
+    void replaceAll(List<Car> cars);
 
     /**
      * Flush all car data.
@@ -31,12 +31,12 @@ public interface CarRepository {
     /**
      * Get the number of available seats for a specific car.
      */
-    int getAvailableSeats(int carId);
+    Integer getAvailableSeats(int carId);
 
     /**
      * Release seats and get the new total available seats atomically.
      */
-    int releaseSeats(int carId, int seats);
+    Integer releaseSeats(int carId, int seats);
 
     /**
      * Try to reserve seats from a specific car atomically.

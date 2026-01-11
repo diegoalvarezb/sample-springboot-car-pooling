@@ -13,14 +13,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.cabify.carpooling.dto.CarDTO;
 import com.cabify.carpooling.dto.JourneyDTO;
-import com.cabify.carpooling.exception.ExistingGroupException;
-import com.cabify.carpooling.exception.GroupNotFoundException;
 import com.cabify.carpooling.exception.InvalidPayloadException;
 import com.cabify.carpooling.mapper.CarMapper;
 import com.cabify.carpooling.model.Car;
-import com.cabify.carpooling.service.CarService;
-import com.cabify.carpooling.service.GroupService;
-import com.cabify.carpooling.service.JourneyService;
+import com.cabify.carpooling.service.CarPoolingService;
 
 /**
  * Main controller for the Car Pooling service.
@@ -28,18 +24,10 @@ import com.cabify.carpooling.service.JourneyService;
 @RestController
 public class CarPoolingController {
 
-    private final CarService carService;
-    private final GroupService groupService;
-    private final JourneyService journeyService;
+    private final CarPoolingService carPoolingService;
 
-    // Global lock to ensure atomicity across multi-step operations
-    private final Object lock = new Object();
-
-    public CarPoolingController(CarService carService, GroupService groupService,
-            JourneyService journeyService) {
-        this.carService = carService;
-        this.groupService = groupService;
-        this.journeyService = journeyService;
+    public CarPoolingController(CarPoolingService carPoolingService) {
+        this.carPoolingService = carPoolingService;
     }
 
     /**
@@ -66,7 +54,7 @@ public class CarPoolingController {
         validateCars(carDTOs);
 
         List<Car> cars = CarMapper.toEntities(carDTOs);
-        carService.load(cars);
+        carPoolingService.loadCars(cars);
 
         return ResponseEntity.ok().build();
     }
@@ -81,16 +69,7 @@ public class CarPoolingController {
         int groupId = journeyDTO.getId();
         int people = journeyDTO.getPeople();
 
-        synchronized (lock) {
-            // Check if group already exists
-            if (groupService.getPeople(groupId) != null) {
-                throw new ExistingGroupException();
-            }
-
-            // Register group and request journey
-            groupService.add(groupId, people);
-            journeyService.request(groupId, people);
-        }
+        carPoolingService.requestJourney(groupId, people);
 
         return ResponseEntity.ok().build();
     }
@@ -105,16 +84,7 @@ public class CarPoolingController {
             return ResponseEntity.badRequest().build();
         }
 
-        synchronized (lock) {
-            // Check if group exists
-            Integer people = groupService.getPeople(groupId);
-            if (people == null) {
-                throw new GroupNotFoundException();
-            }
-
-            // Execute dropoff
-            journeyService.dropoff(groupId, people);
-        }
+        carPoolingService.dropoff(groupId);
 
         return ResponseEntity.ok().build();
     }
@@ -129,24 +99,14 @@ public class CarPoolingController {
             return ResponseEntity.badRequest().build();
         }
 
-        synchronized (lock) {
-            // Check if group exists
-            if (groupService.getPeople(groupId) == null) {
-                throw new GroupNotFoundException();
-            }
-
-            // Check if group is still waiting
-            Integer carId = journeyService.getCar(groupId);
-            if (carId == null) {
-                return ResponseEntity.noContent().build();
-            }
-
-            // Get the car the group is traveling in and convert to DTO
-            Car car = carService.get(carId);
-            CarDTO carDTO = CarMapper.toDTO(car);
-
-            return ResponseEntity.ok(carDTO);
+        Car car = carPoolingService.locate(groupId);
+        if (car == null) {
+            return ResponseEntity.noContent().build();
         }
+
+        CarDTO carDTO = CarMapper.toDTO(car);
+
+        return ResponseEntity.ok(carDTO);
     }
 
     /**
@@ -168,7 +128,7 @@ public class CarPoolingController {
 
             if (carDTO.getSeats() < 1 || carDTO.getSeats() > 6) {
                 throw new InvalidPayloadException(String.format(
-                        "Car at index %d (id=%d) has invalid seats: %d (must be between 4 and 6)",
+                        "Car at index %d (id=%d) has invalid seats: %d (must be between 1 and 6)",
                         index, carDTO.getId(), carDTO.getSeats()));
             }
 

@@ -8,8 +8,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * In-memory implementation of JourneyRepository.
- *
- * Thread-safe using ConcurrentHashMap.
  */
 @Repository
 public class InMemoryJourneyRepository implements JourneyRepository {

@@ -26,7 +26,7 @@ The service follows a **layered architecture**:
   - Coordinates cars, groups and journeys.
 - **Repository Layer** (`repository`):
   - In-memory implementations for cars, groups and journeys.
-  - Responsible for concurrency control and efficient queries.
+  - Handles concurrency control and efficient queries.
 - **Model & DTO Layer** (`model`, `dto`, `mapper`):
   - `model` contains internal domain entities (e.g. `Car`).
   - `dto` contains public API payloads (`CarDTO`, `JourneyDTO`).
@@ -34,25 +34,34 @@ The service follows a **layered architecture**:
 
 ### In-Memory Storage & Concurrency
 
-The system is designed to run **without an external database**, using in-memory repositories that are safe for concurrent access:
+The system is designed to run **without an external database**, relying on thread-safe in-memory repositories to allow concurrent access without sacrificing data integrity.
+
+#### How concurrency and race conditions are handled
+
+Concurrency is managed in a simple but robust way:
+Critical data structures are protected with standard Java synchronization primitives to ensure multiple requests can be handled safely without risking data corruption or inconsistent state. The most important parts:
 
 - **Cars** (`InMemoryCarRepository`):
-  - Stores cars in a `ConcurrentHashMap<ID, Car>`.
-  - Uses **bucket-based indexing** by available seats (0–6) with `List<Set<Integer>>`:
-    - Each bucket holds car IDs with that many free seats.
-    - `LinkedHashSet` preserves insertion order (FIFO) for fair allocation.
-  - **Car lookup**: O(1) search by scanning buckets from `seats` to `MAX_SEATS`.
-  - Read/write access guarded with a `ReadWriteLock`.
+  - Cars are stored in a `ConcurrentHashMap<ID, Car>`.
+  - A bucket system (using `List<Set<Integer>>`) efficiently tracks cars by free seats; `LinkedHashSet` preserves FIFO.
+  - All operations that modify car assignment or availability are wrapped using a `ReadWriteLock`, allowing parallel reads but serializing writes. This prevents two threads from assigning the same seat or car at the same time.
+  - Thus, if two requests try to assign a group at once, the lock ensures these actions do not overlap or cause race conditions.
 
 - **Groups & Waiting Queue** (`InMemoryGroupRepository`):
-  - `groups`: `ConcurrentHashMap<groupId, people>` for fast group lookups.
-  - `waitingQueue`: `LinkedHashMap<groupId, people>` to preserve arrival order (FIFO).
-  - `peopleCounter`: `ConcurrentHashMap<people, count>` to quickly know if allocation is possible without scanning the whole queue.
-  - Methods that mutate the queue/state are synchronized to ensure atomic operations.
+  - Active groups are stored in a `ConcurrentHashMap<groupId, people>`.
+  - The waiting queue uses a `LinkedHashMap<groupId, people>` to ensure arrival order (FIFO).
+  - A `peopleCounter` (`ConcurrentHashMap<people, count>`) speeds up allocation checks.
+  - All methods changing the state of the queue or the counter are marked as `synchronized` — only one thread at a time can modify the queue, preventing race conditions when groups are added, assigned, or removed.
+  - Read operations can happen in parallel.
 
 - **Journeys** (`InMemoryJourneyRepository`):
-  - Maintains the association `groupId → carId` for active journeys.
-  - Provides constant-time checks to know if a group is traveling and in which car.
+  - Manages `groupId → carId` assignments for current journeys.
+  - This mapping uses a `ConcurrentHashMap`, allowing safe concurrent get/put operations.
+
+**In summary:**
+Each shared structure is protected either with `ConcurrentHashMap`, a `ReadWriteLock`, or `synchronized` methods - depending on its needs.
+Any operation that updates several pieces of state (e.g. dequeue a group and assign it to a car) is done atomically inside the synchronization block, so no intermediate or invalid states are exposed.
+This allows the service to safely handle many HTTP requests in parallel with consistent, predictable results, and without the risk of assigning the same car or seat twice.
 
 ### Performance & Scalability
 
@@ -60,14 +69,14 @@ The solution is optimized for **10^5 – 10^6 cars and waiting groups**:
 
 - **Algorithmic complexity**:
   - Car finding: **O(1)** using bucket-based indexing by available seats.
-  - Queue processing: **O(n)** in the worst case, with early termination using `peopleCounter`.
+  - Queue processing: **O(n)** in the worst case, early exit via `peopleCounter`.
   - State updates (assign/release seats, enqueue/dequeue groups): **O(1)**.
 - **Memory usage**:
   - Only minimal data is stored for each car, group and journey.
-  - Avoids heavy frameworks or external caches.
+  - Avoids heavyweight frameworks or external caches.
 - **Concurrency**:
   - Repositories are explicitly designed for concurrent access.
-  - Compound operations are guarded with locks or `synchronized` methods.
+  - Compound operations are protected with locks or `synchronized` methods.
 
 ## API Endpoints
 
@@ -324,9 +333,7 @@ src/
 │   │       │       ├── InMemoryGroupRepository.java
 │   │       │       └── InMemoryJourneyRepository.java
 │   │       ├── service/
-│   │       │   ├── CarService.java
-│   │       │   ├── GroupService.java
-│   │       │   └── JourneyService.java
+│   │       │   └── CarPoolingService.java
 │   │       ├── exception/
 │   │       │   ├── ExistingGroupException.java
 │   │       │   ├── GroupNotFoundException.java
@@ -341,8 +348,8 @@ src/
             ├── controller/
             │   └── CarPoolingControllerIntegrationTest.java
             └── service/
-                ├── CarServiceTest.java
-                └── GroupServiceTest.java
+                ├── CarPoolingServiceTest.java
+                └── CarPoolingServiceConcurrencyTest.java
 ```
 
 ## Design & Trade-offs

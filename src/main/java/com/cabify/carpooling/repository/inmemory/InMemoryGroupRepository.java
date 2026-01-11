@@ -9,23 +9,21 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * In-memory implementation of GroupRepository.
- *
- * Thread-safe using ConcurrentHashMap.
  */
 @Repository
 public class InMemoryGroupRepository implements GroupRepository {
 
     private final Map<Integer, Integer> groups = new ConcurrentHashMap<>();
-    private final LinkedHashMap<Integer, Integer> waitingQueue = new LinkedHashMap<>();
     private final Map<Integer, Integer> peopleCounter = new ConcurrentHashMap<>();
+    private final LinkedHashMap<Integer, Integer> waitingQueue = new LinkedHashMap<>();
 
     @Override
-    public synchronized Integer getPeople(int groupId) {
+    public Integer getPeople(int groupId) {
         return groups.get(groupId);
     }
 
     @Override
-    public synchronized void save(int groupId, int people) {
+    public void save(int groupId, int people) {
         groups.put(groupId, people);
     }
 
@@ -40,12 +38,12 @@ public class InMemoryGroupRepository implements GroupRepository {
     }
 
     @Override
-    public synchronized LinkedHashMap<Integer, Integer> getQueue() {
+    public synchronized LinkedHashMap<Integer, Integer> getWaitingQueue() {
         return new LinkedHashMap<>(waitingQueue);
     }
 
     @Override
-    public synchronized boolean areThereGroupsForAllocation(int seats) {
+    public boolean areThereGroupsForAllocation(int seats) {
         for (int people = seats; people > 0; people--) {
             Integer count = peopleCounter.get(people);
 

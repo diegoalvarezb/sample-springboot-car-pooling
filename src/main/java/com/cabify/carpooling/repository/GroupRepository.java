@@ -25,7 +25,7 @@ public interface GroupRepository {
     /**
      * Get the waiting queue (groupId -> people).
      */
-    LinkedHashMap<Integer, Integer> getQueue();
+    LinkedHashMap<Integer, Integer> getWaitingQueue();
 
     /**
      * Check if there are groups waiting for allocation with the given number of
